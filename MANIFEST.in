@@ -1,0 +1,2 @@
+include CHANGES.txt README.md README LICENCE
+recursive-include wagtail_commons *.py
