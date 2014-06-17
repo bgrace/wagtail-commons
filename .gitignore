@@ -1,3 +1,4 @@
 *.pyc
 dist
 MANIFEST
+wagtail_commons.egg-info

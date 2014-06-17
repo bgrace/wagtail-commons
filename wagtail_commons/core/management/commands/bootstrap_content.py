@@ -31,22 +31,6 @@ def get_page_type_class(content_type):
     return page_type.model_class()
 
 
-def set_page_defaults(type=None, title=None, parent=None, slug=None):
-    page_class = get_page_type_class(type)
-
-    page = page_class(owner=owner)
-    page.title = title
-    if not slug:
-        slug = slugify(title)[0:50]
-    page.slug = slug
-    parent.add_child(instance=page)
-    page.live = True
-    page.has_unpublished_changes = False
-    page.show_in_menus = True
-    page.save()
-    return page
-
-
 def document_extractor(f):
     delimiter = '---'
     assert delimiter+'\n' == f.next(), "Malformed input {0}, Expected first line to only contain '{1}'".format(f, delimiter)
@@ -60,11 +44,6 @@ def document_extractor(f):
                 key = line[5:-1]
                 contents[key] = StringIO()
                 continue
-#            else:
-                # This could be a yaml separator or a markdown horizontal rule
-                # Probably need different behavior paths here depending on whether we have started to consume markdown
-                # key = None
- #           continue
 
         if key:
             unix_line = line.replace('\r\n', '\n')
@@ -178,60 +157,10 @@ class SiteNode:
 
         return self.page
 
-
-def find_page_by_path(apex_page, full_url_path):
-    full_url_path = '//' + full_url_path
-    candidate = apex_page.get_parent().get_descendants().filter(url_path=full_url_path, live=True)
-    assert len(candidate) == 1, "Couldn't find exactly one page with path {0}, found {1}".format(full_url_path, len(candidate))
-    return candidate[0]
-
-
-def create_site_menus(apex_page):
-    subsidiaries_query = NavigationMenu.objects.filter(menu_name='Subsidiaries')
-    if subsidiaries_query.exists():
-        subsidiaries_menu = subsidiaries_query.get()
-        subsidiaries_menu.delete()
-
-    subsidiaries_menu = NavigationMenu.objects.create(menu_name='Subsidiaries')
-    einans_menu_item = NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/einans/'),
-                                                         css_class='einans',
-                                                         menu=subsidiaries_menu)
-
-    events_menu_item = NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/events/'),
-                                                         css_class='events',
-                                                         menu_title='Events at Sunset',
-                                                         menu=subsidiaries_menu)
-
-    cemetery_menu_item = NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/cemetery/'),
-                                                           css_class='memorials',
-                                                           menu=subsidiaries_menu)
-
-    top_menu_query = NavigationMenu.objects.filter(menu_name='Top Menu')
-    if top_menu_query.exists():
-        top_menu_query.get().delete()
-
-    top_menu = NavigationMenu.objects.create(menu_name='Top Menu')
-    NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/'),
-                                                       menu_title='Home',
-                                                       menu=top_menu,
-                                                       sort_order=1)
-    NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/plan/'), menu=top_menu, sort_order=2)
-    NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/staff/'), menu=top_menu, sort_order=3)
-    NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/obituaries/'),
-                                                       menu=top_menu,
-                                                       sort_order=4)
-    NavigationMenuItem.objects.create(link_page=find_page_by_path(apex_page, '/community-events/'),
-                                                       menu_title='events',
-                                                       menu=top_menu,
-                                                       sort_order=5)
-
-
-
-
-
+        
 class Command(BaseCommand):
     args = '<content directory>'
-    help = 'Creates content from markdown and yaml files'
+    help = 'Creates content from markdown and yaml files, found in <content directory>/pages'
 
     option_list = BaseCommand.option_list + (
         make_option('--content', dest='content_path', type='string', ),
@@ -239,17 +168,17 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        if len(args) > 1:
+        if len(args) != 1:
+            raise Exception("Only accepts one argument, path to content directory containing a 'pages' directory")
 
-            raise Exception("Only accepts one argument, path to content directory")
-        if len(args) == 1:
-            content_path = args[0]
-        else:
-            content_path = "../resources/content"
+        content_path = args[0]
 
         contents = load_content(os.path.join(content_path, 'pages'))
 
         root = Page.get_first_root_node()
+
+        return
+        
         home_page_attrs = {'type': 'core.homepage',
                            'title': "Sunset Gardens",
                            'body': "Placeholder for home page copy",
@@ -271,44 +200,4 @@ class Command(BaseCommand):
             old_root_page.delete()
 
         create_site_menus(home_page)
-
-        return
-
-        # create obituaries from two weeks in the future into the past, five days apart
-        faker = Faker()
-        now = datetime.datetime.now()
-        obit_start_date = now + datetime.timedelta(days=16)
-        for service_date in [obit_start_date - datetime.timedelta(days=-5*x) for x in range(0,50)]:
-            fake_person = faker.simple_profile()
-            obituary = set_page_defaults('obituary.obituary', fake_person['name'], obituaries_list)
-            obituary.summary = "<p>"+faker.paragraph()+"</p>"
-            obituary.text = ''.join(["<p>" + faker.paragraph(nb_sentences=10, variable_nb_sentences=True) + "</p>" for _ in range(0,10)])
-            obituary.service_date = service_date
-            obituary.service_title = random.choice(['Celebration of Life', 'Memorial', 'Service', 'Tribute'])
-            obituary.service_time = datetime.time(11,0)
-            obituary.date_of_death = faker.date_time_between(start_date="-14d", end_date=service_date)
-            obituary.date_of_birth = fake_person['birthdate']
-            obituary.place_of_birth = faker.city() + ", " + faker.state()
-            obituary.place_of_death = faker.city() + ", " + faker.state()
-            obituary.place_of_residence = faker.city() + ", " + faker.state()
-
-            if faker.boolean():  # show a graveside service
-                obituary.graveside_date = service_date
-                obituary.graveside_time = datetime.time(13,0)
-                obituary.graveside_section = random.choice(['A', 'B', 'C', 'D'])
-                obituary.graveside_lot = str(faker.random_int() % 100)
-            obituary.save()
-
-
-
-
-        root.live = True
-        root.has_unpublished_changes = False
-        root.save()
-
-
-
-
-
-
 
