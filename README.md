@@ -55,6 +55,13 @@ attribute found in the first yaml doc. For delimiters of the form
 the script will consume the entire contents, render it as markdown,
 and then assign the result to the attrribute `some_attr`.
 
+**WARNING**: This command is destructive by design. It finds your root
+  page, _deletes it and everything below it_, and creates a brand new
+  root. So if you have put content in your database, it will be gone
+  after you run it. It is intended to be executed repeatedly as you
+  evolve your content, and meant to discourage creating content "by
+  hand" during the design/development phase.
+
 ## PathOverrideable mixin for Page
 
 PathOverrideable is mixin for Page classes, which reimplements the
