@@ -1,3 +1,5 @@
+__author__ = 'brett@codigious.com'
+
 import glob
 import codecs
 from io import StringIO, BytesIO
@@ -9,20 +11,12 @@ import markdown
 import random
 
 from django.contrib.auth.models import User
-from django.template.defaultfilters import slugify
 from django.contrib.contenttypes.models import ContentType
 
-from wagtail.wagtailadmin.views.pages import get_page_edit_handler
 from wagtail.wagtailcore.models import Site
-
-import pprint
-
-__author__ = 'brett@codigious.com'
 
 from django.core.management.base import BaseCommand, CommandError
 from core.models import *
-
-owner = User.objects.get(id=1)
 
 
 def get_page_type_class(content_type):
@@ -31,6 +25,14 @@ def get_page_type_class(content_type):
     return page_type.model_class()
 
 
+def get_page_defaults(content_root_path):
+    f = file(os.path.join(content_root_path, 'pages.yml'))
+    stream = yaml.load_all(f)
+    defaults = stream.next()
+    stream.close()
+    f.close()
+    return defaults
+    
 def document_extractor(f):
     delimiter = '---'
     assert delimiter+'\n' == f.next(), "Malformed input {0}, Expected first line to only contain '{1}'".format(f, delimiter)
@@ -137,6 +139,7 @@ class SiteNode:
         page_properties.pop('type', None)
 
         page = page_class(owner=owner_user)
+#        page = page_class()
         page.live = True
         page.has_unpublished_changes = False
         page.show_in_menus = True
@@ -164,32 +167,38 @@ class Command(BaseCommand):
 
     option_list = BaseCommand.option_list + (
         make_option('--content', dest='content_path', type='string', ),
-
+        make_option('--owner', dest='owner', type='string'),
     )
 
     def handle(self, *args, **options):
-        if len(args) != 1:
-            raise Exception("Only accepts one argument, path to content directory containing a 'pages' directory")
 
-        content_path = args[0]
+        if not options['content_path']:
+            raise CommandError("Pass --content <content dir>, where <content dir>/pages contain .yml files")
+
+        if not options['owner']:
+            raise CommandError("Pass --owner <username>, where <username> will be the content owner")
+
+        content_path = options['content_path']
+        owner_user = User.objects.get(username=options['owner'])
 
         contents = load_content(os.path.join(content_path, 'pages'))
 
         root = Page.get_first_root_node()
 
-        return
-        
-        home_page_attrs = {'type': 'core.homepage',
-                           'title': "Sunset Gardens",
-                           'body': "Placeholder for home page copy",
-                           'menu_title': "Home"}
+        for page in contents:
+            print page['path']
+            
+        home_page_candidates = [page for page in contents if page['path'] == '/']
+        assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s", len(home_page_candidates))
+        home_page_attrs = home_page_candidates[0]
 
         content_root = SiteNode(full_path='/', page_properties=home_page_attrs, parent_page=root)
         for page_attrs in contents:
             new_node = SiteNode(full_path=page_attrs['path'], page_properties=page_attrs)
             content_root.add_node(new_node)
 
-        home_page = content_root.instantiate_page(owner_user=owner, page_property_defaults={'type': 'core.standardpage'})
+        page_property_defaults = get_page_defaults(content_path)
+        home_page = content_root.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults)
 
         site = Site.objects.get(is_default_site=True)
         old_root_page = site.root_page
@@ -198,6 +207,3 @@ class Command(BaseCommand):
 
         if old_root_page:
             old_root_page.delete()
-
-        create_site_menus(home_page)
-

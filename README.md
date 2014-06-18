@@ -2,9 +2,30 @@
 Wagtail Commons
 ===============
 
-## bootstrap_content
+## About
 
-This adds a django management command which will recursively import a
+While working on two different Wagtail sites, here are some things I
+used... *on both of them*.
+
+## Installation
+
+```
+pip install -e git://github.com/bgrace/wagtail-commons.git#egg=wagtail-commons --upgrade
+```
+
+Add to `INSTALLED_APPS`:
+
+```
+INSTALLED_APPS = (
+    ...
+    wagtail_commons.core,
+    ...
+)
+```
+
+## Management command: bootstrap_content
+
+This adds a Django management command which will recursively import a
 directory of .yml files, in order to create pages in an instance of
 Wagtail CMS.
 
@@ -20,8 +41,8 @@ Where foo.yml looks like:
 
     ---
     title: Is Lorem Really Ipsum?
-    type: core.standardpage
-    --- @intro
+    type: demo.standardpage
+    --- @body
 
     Lorem ipsum *blah blah* dolor blah blah
 
