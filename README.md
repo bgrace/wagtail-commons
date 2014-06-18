@@ -75,15 +75,16 @@ For example:
 ### Page owner
 
 Wagtail expects each page to have an owner. You must supply the
-username of a Django user who will be the owner of this content. If
-you don't. This is a required argument.
+username of a Django user who will be the owner the Pages that will be
+created with the `--owner` argument. This is a required argument.
 
 ### Content Directory Structure
 
-The example command above will look at `../resources/content/pages.yml` for some
-configuration, and then it will recursively consume the contents of
-`../resources/content/pages`, looking for any file with an
-extension of `.yml`.
+Use the `--content` argument to tell the importer where to begin
+searching for content. The example command above will look at
+`../resources/content/pages.yml` for some configuration, and then it
+will recursively consume the contents of `../resources/content/pages`,
+looking for any file with an extension of `.yml`.
 
 #### pages.yml
 
