@@ -26,7 +26,11 @@ def get_page_type_class(content_type):
 
 
 def get_page_defaults(content_root_path):
-    f = file(os.path.join(content_root_path, 'pages.yml'))
+    page_defaults_path = os.path.join(content_root_path, 'pages.yml')
+    if not os.path.isfile(page_defaults_path):
+        return {}
+        
+    f = file(page_defaults_path)
     stream = yaml.load_all(f)
     defaults = stream.next()
     stream.close()

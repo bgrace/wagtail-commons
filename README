@@ -30,6 +30,9 @@ This adds a Django management command which will recursively import a
 directory of .yml files, in order to create pages in an instance of
 Wagtail CMS.
 
+Introduction
+~~~~~~~~~~~~
+
 This is a django management commend for use with Wagtail that
 recursively consumes a directory with yaml-based front matter and
 markdown contents. For example, if you have the following files:
@@ -69,8 +72,159 @@ you run it. It is intended to be executed repeatedly as you evolve your
 content, and meant to discourage creating content "by hand" during the
 design/development phase.
 
+Invocation
+~~~~~~~~~~
+
+Run as
+``python manage.py bootstrap_content --content <page definitions directory> --owner <username>``
+
+For example:
+
+``./manage.py bootstrap_content --content ../resources/content --owner johndoe``
+
+Page owner
+~~~~~~~~~~
+
+Wagtail expects each page to have an owner. You must supply the username
+of a Django user who will be the owner of this content. If you don't.
+This is a required argument.
+
+Content Directory Structure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The example command above will look at
+``../resources/content/pages.yml`` for some configuration, and then it
+will recursively consume the contents of ``../resources/content/pages``,
+looking for any file with an extension of ``.yml``.
+
+pages.yml
+^^^^^^^^^
+
+The attributes in pages.yml will be added to every page definition,
+unless the page definition provides a value. For example, most of the
+pages in one of my projects are of type 'core.standardpage'. So my
+pages.yml looks like:
+
+::
+
+    ---
+    type: core.standardpage
+    ---
+
+Page definition files
+^^^^^^^^^^^^^^^^^^^^^
+
+Page definition files are a mixture of YAML and markdown, with a .yml
+extension. The command uses, or perhaps abuses, the YAML concept of
+embedding multiple documents in a single file, and recognizes an
+alternative syntax to embed multiple markdown documents. While this is
+grotesquely out of spec for both parsers, it seems friendly to the
+humans who have to edit it.
+
+For example, suppose a page definition file is placed at
+``contents/pages/lorem.yml`` and it looks like this:
+
+::
+
+    ---
+    type: demo.standardpage
+    title: Lorem in the Mist
+    --- @intro
+    A brief history of *lorem ipsum*.
+    --- @body
+    ## The early years
+
+    Lorem ipsum was first ipsetur dolet sinatra lectibemur indemus
+    singlemaltscotchitum et valar morghulis megatonda whimsy.
+
+    Et cetera ceteribus
+
+The document must begin with ``---`` on a line by itself in order to be
+interpeted as YAML by the YAML parser. Any attributes defined in the
+section will be applied to the Page object. After the first YAML
+document is consumed, the command will look for documents delimeted by
+``--- @some_attr``, where ``some_attr`` corresponds to some (for now,
+string-based) Django model field. The markdown processor will convert
+the contents to HTML, which will be assigned to the corresponding
+attribute. Currently this command only supports attributes that can be
+assigned to fields expecting string data. In other words there is a
+**huge, gaping hole in its capabilities**. Sorry about that. I'll
+probably need to add it for my own purposes, so sit tight.
+
+For example, the above example will be interpreted in the following way:
+
+-  Create a new page object of type demo.StandardPage
+-  Make its owner the ``User`` object corresponding to the ``--owner``
+   flag
+-  Set the URL path of the page to ``/lorem/`` (inferred by placement in
+   the contents directory)
+-  Set the ``title`` of the page to 'Lorem in the Mist'
+-  Set the ``intro`` of the page to "A brief history of <i>lorem
+   ipsum</i>"
+-  Set the ``body`` of the page to "<h2>The early years</h2>..." (and so
+   on)
+
+Directory layout and site map
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In general, the directory layout is the sitemap. The slug for the Page
+is inferred from the path leading to the page definition, and the name
+of the page definition file, less the extension. So a page found at
+``$CONTENT_ROOT/pages/kingdom/phyllum/class/order/species/roygbiv.yml``
+would have the URL path
+``/kingdom/phyllum/class/order/species/roygbiv/``. However, you need to
+have a page definition present at every intermediate level. So you would
+actually need:
+
+::
+
+    pages/kingdom.yml
+    pages/kingdom/phyllum.yml
+    pages/kingdom/phyllum/class.yml
+    pages/kingdom/phyllum/class/order.yml
+    pages/kingdom/phyllum/class/species.yml
+    pages/kingdom/phyllum/class/species/roygbiv.yml
+
+(Note: I believe that this is an intrinsic limitation of Wagtail, since
+each Page must have a parent.)
+
+Defining the root page
+~~~~~~~~~~~~~~~~~~~~~~
+
+Your site needs a home page, with a url path of ``/``. But you're not
+going to call your page definition ``/.yml``, right? Right. Fortunately,
+your YAML front matter can contain an optional attribute, ``path``,
+which overrides inferred URL. *You must* have a page definition with:
+
+::
+
+    ---
+    path: /
+    (... other attributes)
+
+For example, one of my sites has a file ``pages/home.yml``, which looks
+like this:
+
+::
+
+    ---
+    path: /
+    title: Home
+    type: core.homepage
+    --- @body
+    Lorem facta est
+
+It doesn't matter where in the content directory hierarchy this file
+exists. In fact, you can use the ``path`` override to enforce a
+completely flat directory layout. The path-based URL inference is purely
+a convenience.
+
 PathOverrideable mixin for Page
 -------------------------------
+
+I created this package for myself as a repository of Wagtail
+miscellanea. The first one of which is a way for a Page to override the
+template based on the URL which it is attempting to serve.
 
 PathOverrideable is mixin for Page classes, which reimplements the
 Page.get\_template method. It allows the page template to be overriden
@@ -97,6 +251,7 @@ This will override the template for every page of type ``QuxPage`` which
 has ``/foo/`` as an ancestor.
 
 In all cases, if an override cannot be found, the value of the Page
-object's ``template`` property will be returned.
+object's ``template`` property will be returned, i.e., whatever template
+would normally be selected in the absence of this mixin.
 
-Inspired by Mezzanine's template search facility.
+Inspired by Mezzanine's template-lookup approach.
