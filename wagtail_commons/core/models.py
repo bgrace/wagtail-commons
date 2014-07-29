@@ -11,12 +11,17 @@ logger = logging.getLogger(__name__)
 
 class PathOverrideable:
 
-    def get_template(self, request):
+    def get_template(self, request, mode='', **kwargs):
         path = request.path.strip('/')
         model_name = camelcase_to_underscore(self.specific_class.__name__)
-        model_template = model_name + '.html'
 
-        full_path = os.path.join('default', path+'.html')
+        if mode:
+            mode = ':'+mode
+
+        model_template = model_name + mode + '.html'
+
+
+        full_path = os.path.join('default', path+mode+'.html')
         templates = [full_path]
         logger.debug("Adding candidate template based on URL: %s", full_path)
 

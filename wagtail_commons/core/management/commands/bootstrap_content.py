@@ -2,13 +2,12 @@ __author__ = 'brett@codigious.com'
 
 import glob
 import codecs
-from io import StringIO, BytesIO
+import os
+from io import StringIO
 from optparse import make_option
-import datetime
-from faker import Faker
 import yaml, yaml.parser
 import markdown
-import random
+from wagtail.wagtailcore.models import Page
 
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
@@ -16,7 +15,6 @@ from django.contrib.contenttypes.models import ContentType
 from wagtail.wagtailcore.models import Site
 
 from django.core.management.base import BaseCommand, CommandError
-from core.models import *
 
 
 def get_page_type_class(content_type):
@@ -36,7 +34,8 @@ def get_page_defaults(content_root_path):
     stream.close()
     f.close()
     return defaults
-    
+
+
 def document_extractor(f):
     delimiter = '---'
     assert delimiter+'\n' == f.next(), "Malformed input {0}, Expected first line to only contain '{1}'".format(f, delimiter)
@@ -94,7 +93,7 @@ def load_content(content_directory_path, content_root_path=None):
     return contents
 
 
-class SiteNode:
+class SiteNode(object):
 
     def __init__(self, full_path, page_properties=None, parent_page=None):
         self.children = []
@@ -137,13 +136,15 @@ class SiteNode:
                 self.children.append(intermediate_node)
                 intermediate_node.add_node(new_node)
 
-    def instantiate_page(self, owner_user, page_property_defaults={}):
+    def instantiate_page(self, owner_user, page_property_defaults=None):
+        if not page_property_defaults:
+            page_property_defaults = dict()
+
         page_properties = dict(page_property_defaults.items() + self.page_properties.items())
         page_class = get_page_type_class(page_properties['type'])
         page_properties.pop('type', None)
 
         page = page_class(owner=owner_user)
-#        page = page_class()
         page.live = True
         page.has_unpublished_changes = False
         page.show_in_menus = True
@@ -193,7 +194,7 @@ class Command(BaseCommand):
             print page['path']
             
         home_page_candidates = [page for page in contents if page['path'] == '/']
-        assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s", len(home_page_candidates))
+        assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s" %len(home_page_candidates))
         home_page_attrs = home_page_candidates[0]
 
         content_root = SiteNode(full_path='/', page_properties=home_page_attrs, parent_page=root)

@@ -2,3 +2,4 @@
 dist
 MANIFEST
 wagtail_commons.egg-info
+*.iml
