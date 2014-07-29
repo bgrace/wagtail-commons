@@ -3,24 +3,13 @@ from wagtail.wagtailimages.models import get_image_model
 
 __author__ = 'brett@codigious.com'
 
-import glob
-import codecs
-import re
 import filecmp
-from io import StringIO, BytesIO
-from optparse import make_option
-import datetime
-from faker import Faker
-import yaml, yaml.parser
-import markdown
-import random
+import os
 
+from optparse import make_option
 from django.contrib.auth.models import User
 
-from wagtail.wagtailcore.models import Site
-
 from django.core.management.base import BaseCommand, CommandError
-from core.models import *
 
 # <embed alt="urn" embedtype="image" format="right" id="1"/>
 

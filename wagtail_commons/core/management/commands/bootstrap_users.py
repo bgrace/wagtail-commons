@@ -1,24 +1,14 @@
 __author__ = 'brett@codigious.com'
 
-import glob
 import codecs
-import re
-from io import StringIO, BytesIO
+import os
 from optparse import make_option
-import datetime
-from faker import Faker
-import yaml, yaml.parser
-import markdown
-import random
 
+import yaml
+import yaml.parser
 from django.contrib.auth.models import User
 from django.db.utils import IntegrityError
-from django.contrib.contenttypes.models import ContentType
-
-from wagtail.wagtailcore.models import Site
-
 from django.core.management.base import BaseCommand, CommandError
-from core.models import *
 
 
 class Command(BaseCommand):
