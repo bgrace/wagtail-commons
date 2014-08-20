@@ -20,7 +20,6 @@ class PathOverrideable:
 
         model_template = model_name + mode + '.html'
 
-
         full_path = os.path.join('default', path+mode+'.html')
         templates = [full_path]
         logger.debug("Adding candidate template based on URL: %s", full_path)
@@ -35,6 +34,7 @@ class PathOverrideable:
             templates.append(candidate)
             logger.debug("Adding candidate template for path-based model override: %s", candidate)
 
+        #templates.append("%s/%s" % (self.specific_class._meta.app_label, model_name))
         templates.append(self.template)  # add the default template as the last one to seek
         
         logger.debug("Adding candidate template based on model name only: %s", self.template)

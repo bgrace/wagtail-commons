@@ -1,3 +1,5 @@
+import re
+
 __author__ = 'brett@codigious.com'
 
 import glob
@@ -65,8 +67,11 @@ def load_content(content_directory_path, content_root_path=None):
     else:
         content_root_path = content_directory_path
 
-    contents_paths = glob.glob("{0}/*.yml".format(content_directory_path))
+    contents_paths = sorted(glob.glob("{0}/*.yml".format(content_directory_path)))
+
+    p = re.compile(r'(?:\d+\s+)?(.*)')  # used to strip numbers from start of file, e.g., 001 sample.yml -> sample.yml
     contents = []
+
     for path in contents_paths:
         f = codecs.open(path, encoding='utf-8')
         stream = yaml.load_all(f)
@@ -76,7 +81,9 @@ def load_content(content_directory_path, content_root_path=None):
         documents = document_extractor(f)
 
         if not 'path' in front_matter:
-            computed_path = '/' + path[len(content_root_path):-4].strip('/') + '/'
+            computed_path = path[len(content_root_path):-4].strip('/')  # get the bare slug
+            computed_path = p.search(computed_path).group(1)  # strip any leading positional nubmers
+            computed_path = '/' + computed_path + '/'  # normalize by surrounding with /
             front_matter['path'] = computed_path
 
         for key in documents:
@@ -137,6 +144,9 @@ class SiteNode(object):
                 intermediate_node.add_node(new_node)
 
     def instantiate_page(self, owner_user, page_property_defaults=None):
+
+        print "instantiating {0}".format(self.page_properties['path'])
+
         if not page_property_defaults:
             page_property_defaults = dict()
 
@@ -173,6 +183,7 @@ class Command(BaseCommand):
     option_list = BaseCommand.option_list + (
         make_option('--content', dest='content_path', type='string', ),
         make_option('--owner', dest='owner', type='string'),
+        make_option('--dry', dest='dry', action='store_true'),
     )
 
     def handle(self, *args, **options):
@@ -185,6 +196,7 @@ class Command(BaseCommand):
 
         content_path = options['content_path']
         owner_user = User.objects.get(username=options['owner'])
+        dry_run = options['dry']
 
         contents = load_content(os.path.join(content_path, 'pages'))
 
@@ -203,6 +215,11 @@ class Command(BaseCommand):
             content_root.add_node(new_node)
 
         page_property_defaults = get_page_defaults(content_path)
+
+        if dry_run:
+            self.stdout.write("Dry run, exiting without making changes")
+            return
+
         home_page = content_root.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults)
 
         site = Site.objects.get(is_default_site=True)
