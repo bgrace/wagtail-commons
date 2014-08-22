@@ -87,7 +87,8 @@ def load_content(content_directory_path, content_root_path=None):
             front_matter['path'] = computed_path
 
         for key in documents:
-            front_matter[key] = markdown.markdown(documents[key].getvalue())
+            front_matter[key] = markdown.markdown(documents[key].getvalue(),
+                                                  extensions=['extra', ])
         contents.append(front_matter)
 
     sub_directories = [os.path.join(content_directory_path, name) for name in os.listdir(content_directory_path)
