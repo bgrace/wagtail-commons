@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class PathOverrideable:
 
     def get_template(self, request, mode='', **kwargs):
-        path = request.path.strip('/')
+        path = self.url.strip('/')
         model_name = camelcase_to_underscore(self.specific_class.__name__)
 
         if mode:
