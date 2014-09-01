@@ -19,11 +19,11 @@ class ImageImporter(object):
     ImageModel = get_image_model()
     image_instance = ImageModel()
 
-    def __init__(self, path, owner):
+    def __init__(self, path, owner, stdout, stderr):
         self.library_path = path
         self.owner = owner
-        #self.stdout = stdout
-        #self.stderr = stderr
+        self.stdout = stdout
+        self.stderr = stderr
         self.results = {'total': 0,
                         'unchanged': 0,
                         'altered': 0,
@@ -83,11 +83,11 @@ class ImageImporter(object):
                         self.increment_stat('unchanged')
                     else:
                         image = self.update_file(path)
-                        #self.stdout.write("Updated: {0} (updating image, retaining id {1})".format(path, image.id))
+                        self.stdout.write("Updated: {0} (updating image, retaining id {1})".format(path, image.id))
                         self.increment_stat('altered')
                 else:
                     self.stdout.write("Adding new image {0}".format(path))
-                    #self.add_file(path)
+                    self.add_file(path)
                     self.increment_stat('inserted')
 
     def get_results(self):

@@ -7,17 +7,20 @@ import codecs
 import os
 from io import StringIO
 from optparse import make_option
+
 import yaml, yaml.parser
 import markdown
-from wagtail.wagtailcore.models import Page
-
-from django.contrib.auth.models import User
-from django.contrib.contenttypes.models import ContentType
-
-from wagtail.wagtailcore.models import Site
 
 from django.core.management.base import BaseCommand, CommandError
+from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
+from django.template import Template, Context, add_to_builtins
+#from django.template import add_to_builtins
 
+from wagtail.wagtailcore.models import Site
+from wagtail.wagtailcore.models import Page
+
+add_to_builtins("wagtail_commons.core.templatetags.bootstrap_wagtail_tags")
 
 def get_page_type_class(content_type):
     (app_label, model) = content_type.split('.')
@@ -82,13 +85,20 @@ def load_content(content_directory_path, content_root_path=None):
 
         if not 'path' in front_matter:
             computed_path = path[len(content_root_path):-4].strip('/')  # get the bare slug
-            computed_path = p.search(computed_path).group(1)  # strip any leading positional nubmers
+            computed_path = p.search(computed_path).group(1)  # strip any leading positional numbers
             computed_path = '/' + computed_path + '/'  # normalize by surrounding with /
             front_matter['path'] = computed_path
 
         for key in documents:
-            front_matter[key] = markdown.markdown(documents[key].getvalue(),
-                                                  extensions=['extra', ])
+            rendered_markdown = Template(documents[key].getvalue()).render(Context())
+            db_safe_html = markdown.markdown(rendered_markdown, extensions=['extra', ])
+
+            front_matter[key] = db_safe_html
+            if computed_path == '/plan/':
+                print(rendered_markdown)
+                print("**********")
+                print(db_safe_html)
+
         contents.append(front_matter)
 
     sub_directories = [os.path.join(content_directory_path, name) for name in os.listdir(content_directory_path)
@@ -113,6 +123,8 @@ class SiteNode(object):
         self.page_properties = page_properties
         self.parent_page = parent_page
         self.page = None
+
+        self.attribute_regex = re.compile(r'(\w*)(?:\[(\w*)\])?')
 
     def __str__(self):
         return self.full_path
@@ -163,8 +175,16 @@ class SiteNode(object):
 
         # for all other page attributes, set them dynamically
         page.title = page_properties['title']
-        for attr in page_properties:
-            setattr(page, attr, page_properties[attr])
+        for attr, val in page_properties.items():
+            name, index = self.attribute_regex.search(attr).groups()
+            if index:
+                relation = getattr(page, name)
+                model = relation.model
+                # TODO create a config file with these mappings
+                relation.add(model(page=page, name=index, fragment=val))
+            else:
+                setattr(page, attr, val)
+
 
         self.parent_page.add_child(instance=page)
         page.save()

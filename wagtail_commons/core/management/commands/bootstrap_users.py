@@ -43,7 +43,8 @@ class Command(BaseCommand):
                                         email=user['email'],
                                         first_name=user['first_name'],
                                         last_name=user['last_name'],
-                                        is_superuser=user['is_superuser'])
+                                        is_superuser=user['is_superuser'],
+                                        is_staff=user['is_staff'])
                 u.set_password(user['password'])
                 u.save()
                 self.stdout.write("Created {0}".format(user['username']))
