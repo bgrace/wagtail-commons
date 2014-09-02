@@ -62,6 +62,23 @@ def document_extractor(f):
     return contents
 
 
+def load_attributes_from_file(path):
+    f = codecs.open(path, encoding='utf-8')
+    stream = yaml.load_all(f)
+    content_attributes = stream.next()
+    stream.close()
+    f.seek(0)
+    documents = document_extractor(f)
+    f.close()
+
+    for key in documents:
+        rendered_markdown = Template(documents[key].getvalue()).render(Context())
+        db_safe_html = markdown.markdown(rendered_markdown, extensions=['extra', ])
+        content_attributes[key] = db_safe_html
+
+    return content_attributes
+
+
 def load_content(content_directory_path, content_root_path=None):
 
     content_directory_path = os.path.abspath(content_directory_path)
@@ -76,30 +93,16 @@ def load_content(content_directory_path, content_root_path=None):
     contents = []
 
     for path in contents_paths:
-        f = codecs.open(path, encoding='utf-8')
-        stream = yaml.load_all(f)
-        front_matter = stream.next()
-        stream.close()
-        f.seek(0)
-        documents = document_extractor(f)
 
-        if not 'path' in front_matter:
+        content_attributes = load_attributes_from_file(path)
+
+        if not 'path' in content_attributes:
             computed_path = path[len(content_root_path):-4].strip('/')  # get the bare slug
             computed_path = p.search(computed_path).group(1)  # strip any leading positional numbers
             computed_path = '/' + computed_path + '/'  # normalize by surrounding with /
-            front_matter['path'] = computed_path
+            content_attributes['path'] = computed_path
 
-        for key in documents:
-            rendered_markdown = Template(documents[key].getvalue()).render(Context())
-            db_safe_html = markdown.markdown(rendered_markdown, extensions=['extra', ])
-
-            front_matter[key] = db_safe_html
-            if computed_path == '/plan/':
-                print(rendered_markdown)
-                print("**********")
-                print(db_safe_html)
-
-        contents.append(front_matter)
+        contents.append(content_attributes)
 
     sub_directories = [os.path.join(content_directory_path, name) for name in os.listdir(content_directory_path)
                        if os.path.isdir(os.path.join(content_directory_path, name))]
@@ -113,6 +116,8 @@ def load_content(content_directory_path, content_root_path=None):
 
 class SiteNode(object):
 
+    attribute_regex = re.compile(r'(\w*)(?:\[(\w*)\])?')
+
     def __init__(self, full_path, page_properties=None, parent_page=None):
         self.children = []
         self.full_path = full_path.rstrip('/')+'/'
@@ -123,8 +128,6 @@ class SiteNode(object):
         self.page_properties = page_properties
         self.parent_page = parent_page
         self.page = None
-
-        self.attribute_regex = re.compile(r'(\w*)(?:\[(\w*)\])?')
 
     def __str__(self):
         return self.full_path
@@ -156,6 +159,21 @@ class SiteNode(object):
                 self.children.append(intermediate_node)
                 intermediate_node.add_node(new_node)
 
+
+    @staticmethod
+    def set_page_attributes(page, page_properties):
+        for attr, val in page_properties.items():
+            name, index = SiteNode.attribute_regex.search(attr).groups()
+            if index:
+                relation = getattr(page, name)
+                model = relation.model
+                # TODO create a config file with these mappings
+                relation.add(model(page=page, name=index, fragment=val))
+            else:
+                setattr(page, attr, val)
+
+
+
     def instantiate_page(self, owner_user, page_property_defaults=None):
 
         print "instantiating {0}".format(self.page_properties['path'])
@@ -175,16 +193,7 @@ class SiteNode(object):
 
         # for all other page attributes, set them dynamically
         page.title = page_properties['title']
-        for attr, val in page_properties.items():
-            name, index = self.attribute_regex.search(attr).groups()
-            if index:
-                relation = getattr(page, name)
-                model = relation.model
-                # TODO create a config file with these mappings
-                relation.add(model(page=page, name=index, fragment=val))
-            else:
-                setattr(page, attr, val)
-
+        self.set_page_attributes(page, page_properties)
 
         self.parent_page.add_child(instance=page)
         page.save()

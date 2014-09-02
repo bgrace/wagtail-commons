@@ -43,7 +43,7 @@ class ProtoPageLinkHandler(object):
 
             return '<a %shref="%s">' % (editor_attrs, escape(page.url))
         except Page.DoesNotExist:
-            return "<a style='background: red; color: white'>Broken link: %s</a>" % url_path
+            return "<a style='background: red; color: white'>Broken link: %s</a>" % attrs
 
 
 LINK_HANDLERS['proto-page'] = ProtoPageLinkHandler
