@@ -1,3 +1,5 @@
+import logging
+from django.db.models.fields.related import RelatedField
 import re
 
 __author__ = 'brett@codigious.com'
@@ -21,6 +23,8 @@ from wagtail.wagtailcore.models import Site
 from wagtail.wagtailcore.models import Page
 
 add_to_builtins("wagtail_commons.core.templatetags.bootstrap_wagtail_tags")
+logger = logging.getLogger('wagtail_commons.core')
+
 
 def get_page_type_class(content_type):
     (app_label, model) = content_type.split('.')
@@ -28,17 +32,25 @@ def get_page_type_class(content_type):
     return page_type.model_class()
 
 
-def get_page_defaults(content_root_path):
-    page_defaults_path = os.path.join(content_root_path, 'pages.yml')
-    if not os.path.isfile(page_defaults_path):
+def parse_file(content_root_path, name):
+    path = os.path.join(content_root_path, name)
+    if not os.path.isfile(path):
         return {}
-        
-    f = file(page_defaults_path)
+
+    f = file(path)
     stream = yaml.load_all(f)
-    defaults = stream.next()
+    doc = stream.next()
     stream.close()
     f.close()
-    return defaults
+    return doc
+
+
+def get_page_defaults(content_root_path):
+    return parse_file(content_root_path, 'pages.yml')
+
+
+def get_relation_mappings(content_root_path):
+    return parse_file(content_root_path, 'relations.yml')
 
 
 def document_extractor(f):
@@ -161,25 +173,73 @@ class SiteNode(object):
 
 
     @staticmethod
-    def set_page_attributes(page, page_properties):
-        for attr, val in page_properties.items():
+    def set_page_attributes(page, page_properties, relation_mappings=None):
+
+        def interpolate(page, index, doc, val):
+            if "$page" == val:
+                return page
+            if "$index" == val:
+                return index
+            if "$doc" == val:
+                return doc
+            return val
+
+        if not relation_mappings:
+            relation_mappings = dict()
+
+        for attr, doc in page_properties.items():
             name, index = SiteNode.attribute_regex.search(attr).groups()
-            if index:
-                relation = getattr(page, name)
-                model = relation.model
-                # TODO create a config file with these mappings
-                relation.add(model(page=page, name=index, fragment=val))
+
+            # This is a relation, they payload (doc) should be a list of related model instances to deserialize
+            field = getattr(page, attr)
+            (field_object, model, direct, m2m) = page._meta.get_field_by_name(attr)
+            if direct:  # we don't yet support a way of setting a one-to-one here
+                setattr(page, attr, doc)
             else:
-                setattr(page, attr, val)
+                relation = field
+                model = relation.model
+                mappings = relation_mappings.get(str(model.__name__), dict())
+
+                # @-notation was used, so this is a markdown-rendered text field. index is the subfield, doc is the text
+                if index:
+                    create_attrs = {name: interpolate(page, index, doc, val) for name, val in mappings.items()}
+
+                    # The definition itself will have values and attrs, so apply them to the object...
+                    for rel_attr, rel_doc in doc.items():
+                        create_attrs[rel_attr] = rel_doc
+
+                    logger.info("Will map with: %s", create_attrs)
+                    relation.add(model(**create_attrs))
+
+                # This relation is defined as basic YAML, without any markdown rendering
+                else:
+                    # The doc is a list of serialized models
+                    related_objects = []
+                    for related_object in doc:
+                        create_attrs = {name: interpolate(page, index, doc, val) for name, val in mappings.items()}
+                        logger.info("%s / %s", related_object, create_attrs)
+
+                        for rel_attr, rel_doc in related_object.items():
+                            create_attrs[rel_attr] = rel_doc
+
+                        related_objects.append(model(**create_attrs))
+
+                    setattr(page, attr, related_objects)
 
 
 
-    def instantiate_page(self, owner_user, page_property_defaults=None):
+    def instantiate_page(self, owner_user,
+                         page_property_defaults=None,
+                         relation_mappings=None,
+                         dry_run=True):
 
         print "instantiating {0}".format(self.page_properties['path'])
 
         if not page_property_defaults:
             page_property_defaults = dict()
+
+        if not relation_mappings:
+            relation_mappings = dict()
 
         page_properties = dict(page_property_defaults.items() + self.page_properties.items())
         page_class = get_page_type_class(page_properties['type'])
@@ -193,15 +253,17 @@ class SiteNode(object):
 
         # for all other page attributes, set them dynamically
         page.title = page_properties['title']
-        self.set_page_attributes(page, page_properties)
+        self.set_page_attributes(page, page_properties, relation_mappings=relation_mappings)
 
-        self.parent_page.add_child(instance=page)
-        page.save()
+        if not dry_run:
+            self.parent_page.add_child(instance=page)
+            page.save()
+
         self.page = page
 
         for child in self.children:
             child.parent_page = self.page
-            child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults)
+            child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults, dry_run=dry_run)
 
         return self.page
 
@@ -245,12 +307,16 @@ class Command(BaseCommand):
             content_root.add_node(new_node)
 
         page_property_defaults = get_page_defaults(content_path)
+        relation_mappings = get_relation_mappings(content_path)
+
+        home_page = content_root.instantiate_page(owner_user=owner_user,
+                                                  page_property_defaults=page_property_defaults,
+                                                  relation_mappings=relation_mappings,
+                                                  dry_run=dry_run)
 
         if dry_run:
             self.stdout.write("Dry run, exiting without making changes")
             return
-
-        home_page = content_root.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults)
 
         site = Site.objects.get(is_default_site=True)
         old_root_page = site.root_page
