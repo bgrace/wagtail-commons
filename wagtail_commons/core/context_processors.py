@@ -1,5 +1,6 @@
 import logging
-from wagtail_commons.core.management.commands.bootstrap_content import load_attributes_from_file, SiteNode
+from wagtail_commons.core.management.commands.bootstrap_content import load_attributes_from_file, SiteNode, \
+    get_relation_mappings
 import os
 
 from django.conf import settings
@@ -26,7 +27,14 @@ def live_preview(request):
         return {}
 
     content_attributes = load_attributes_from_file(content_file)
-    SiteNode.set_page_attributes(page, content_attributes)
+
+    try:
+        del content_attributes['type']
+    except KeyError:
+        pass
+
+    SiteNode.set_page_attributes(page, content_attributes,
+                                 get_relation_mappings(os.path.join(settings.BOOTSTRAP_CONTENT_DIR, 'relations.yml')))
 
     return {'self': page}
 
