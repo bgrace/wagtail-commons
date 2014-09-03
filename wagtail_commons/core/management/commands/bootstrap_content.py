@@ -54,8 +54,11 @@ def get_relation_mappings(content_root_path):
 
 
 def document_extractor(f):
-    delimiter = '---'
-    assert delimiter+'\n' == f.next(), "Malformed input {0}, Expected first line to only contain '{1}'".format(f, delimiter)
+    delimiter = u'---'
+    line = f.next().rstrip(u'\n\r')
+
+    assert delimiter == line,\
+        "Malformed input in{0}\n: Line {1}\nExpected first line to only contain '{2}'".format(f, line, delimiter)
 
     contents = dict()
     key = None
