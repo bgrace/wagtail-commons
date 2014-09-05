@@ -144,6 +144,8 @@ class SiteNode(object):
         self.parent_page = parent_page
         self.page = None
 
+        self.post_instantiation_related_models = []
+
     def __str__(self):
         return self.full_path
 
@@ -190,6 +192,8 @@ class SiteNode(object):
         if not relation_mappings:
             relation_mappings = dict()
 
+        deferred_relations = []
+
         for attr, doc in page_properties.items():
             name, index = SiteNode.attribute_regex.search(attr).groups()
 
@@ -218,6 +222,8 @@ class SiteNode(object):
                 else:
                     # The doc is a list of serialized models
                     related_objects = []
+
+                    defer_assignment = False
                     for related_object in doc:
                         create_attrs = {name: interpolate(page, index, doc, val) for name, val in mappings.items()}
                         logger.info("%s / %s", related_object, create_attrs)
@@ -225,9 +231,22 @@ class SiteNode(object):
                         for rel_attr, rel_doc in related_object.items():
                             create_attrs[rel_attr] = rel_doc
 
-                        related_objects.append(model(**create_attrs))
+                        for rel_doc in create_attrs.values():
+                            defer_assignment = defer_assignment or '$' == rel_doc[0]
 
-                    setattr(page, attr, related_objects)
+                        related_objects.append(create_attrs)
+
+                    if defer_assignment:
+                        deferred_relations.append((page, attr, related_objects))
+                        #model=page, rel_name=attr, create_attrs_list=related_objects)
+                    else:
+                        related_models = []
+                        for create_attrs in related_objects:
+                            related_models.append(model(**create_attrs))
+
+                        setattr(page, attr, related_models)
+
+        return deferred_relations
 
 
 
@@ -281,6 +300,12 @@ class Command(BaseCommand):
         make_option('--dry', dest='dry', action='store_true'),
     )
 
+    option_list = BaseCommand.option_list + (
+        make_option('--content', dest='content_path', type='string', ),
+        make_option('--owner', dest='owner', type='string'),
+        make_option('--dry', dest='dry', action='store_true'),
+    )
+
     def handle(self, *args, **options):
 
         if not options['content_path']:
@@ -299,7 +324,7 @@ class Command(BaseCommand):
 
         for page in contents:
             print page['path']
-            
+
         home_page_candidates = [page for page in contents if page['path'] == '/']
         assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s" %len(home_page_candidates))
         home_page_attrs = home_page_candidates[0]
@@ -328,3 +353,4 @@ class Command(BaseCommand):
 
         if old_root_page:
             old_root_page.delete()
+
