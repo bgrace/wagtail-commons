@@ -21,7 +21,13 @@ from django.conf import settings
 
 from wagtail.wagtailcore.models import Site
 from wagtail.wagtailcore.models import Page
-from wagtail.wagtailimages.models import get_image_model, get_upload_to
+from wagtail.wagtailimages.models import get_image_model
+
+try:
+    from wagtail.wagtailimages.models import get_upload_to
+except ImportError:
+    def get_upload_to(instance, path):
+        return instance.get_upload_to(path)
 
 
 
