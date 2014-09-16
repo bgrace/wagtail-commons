@@ -20,6 +20,8 @@ class ImageImporter(object):
     image_instance = ImageModel()
 
     def __init__(self, path, owner, stdout, stderr):
+        # TODO remove dependency on stdout/stderr (this is invoked by other management scripts...)
+
         self.library_path = path
         self.owner = owner
         self.stdout = stdout

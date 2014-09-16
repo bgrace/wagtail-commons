@@ -113,7 +113,12 @@ def load_content(content_directory_path, content_root_path=None):
 
         if not 'path' in content_attributes:
             computed_path = path[len(content_root_path):-4].strip('/')  # get the bare slug
-            computed_path = p.search(computed_path).group(1)  # strip any leading positional numbers
+
+            # break apart the path so we can remove leading digits from the final component
+            path_components = computed_path.split('/')
+            normalized_base_path = p.search(path_components[-1]).group(1)
+            path_components[-1] = normalized_base_path
+            computed_path = '/'.join(path_components)
             computed_path = '/' + computed_path + '/'  # normalize by surrounding with /
             content_attributes['path'] = computed_path
 
