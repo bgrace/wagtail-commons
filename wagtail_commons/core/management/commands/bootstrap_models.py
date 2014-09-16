@@ -153,19 +153,22 @@ class ModelBuilder(object):
                     raise "Unsupported"
                 else:
                     setattr(instance, field_name, field_value)
-            else:
+
+        self.instance.save()
+
+        for field_name, field_value in attrs.items():
+            (field_object, model, direct, m2m) = instance._meta.get_field_by_name(field_name)
+
+            if not direct:
                 related_model = field_object.model
                 related_objects = self.instantiate_related_objects(related_model, field_value, self.model_meta_attrs[field_name])
                 #setattr(instance, field_name, related_objects)
                 deferred_objects.append((field_name, related_objects))
 
-        instance.save()
-
         for field_name, related_objects in deferred_objects:
-            for related_object in related_objects:
-                related_object.save()
-            #setattr(instance, field_name, related_objects)
-            #instance.save()
+           for related_object in related_objects:
+               related_object.save()
+
 
 def load_attributes_from_file(path):
     f = codecs.open(path, encoding='utf-8')
