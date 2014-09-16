@@ -22,9 +22,13 @@ from django.db.models.loading import get_model
 
 from wagtail.wagtailcore.models import Site
 from wagtail.wagtailcore.models import Page
-from wagtail.wagtailimages.models import get_image_model, get_upload_to
+from wagtail.wagtailimages.models import get_image_model
 
-
+try:
+    from wagtail.wagtailimages.models import get_upload_to
+except ImportError:
+    def get_upload_to(instance, path):
+        return instance.get_upload_to(path)
 
 __author__ = 'brett@codigious.com'
 
@@ -74,6 +78,7 @@ class ModelBuilder(object):
         self.model_meta_attrs =model_meta_attrs
         self.model_class = get_model(app_label, model_name)
         self.model_attrs = model_attrs
+        self.instance = None
 
         try:
             self.natural_key = self.model_meta_attrs['natural_key']
@@ -96,13 +101,71 @@ class ModelBuilder(object):
         for attrs in self.model_attrs:
             self.instantiate_object(attrs)
 
+    def interpolate(self, field_name, attrs):
+
+        def identity(val):
+            return val
+
+        def this(val):
+            return self.instance
+
+        def path(val):
+            url_path = '///' + val.strip('/') + '/'
+            return Page.objects.get(url_path=url_path).specific
+
+        mapping = {'$identity': identity,
+                   '$self': this,
+                   '$path': path}
+
+        transformation = attrs.get(field_name, '$identity')
+        function = mapping[transformation]
+
+        return function
+
+
+    def instantiate_related_objects(self, related_model, related_objects, meta_attrs):
+
+        new_objects = []
+        for obj_attrs in related_objects:
+            new_obj = related_model()
+
+            input_attrs = dict(meta_attrs.items() + obj_attrs.items())
+            for field_name, field_value in input_attrs.items():
+                f = self.interpolate(field_name, meta_attrs)
+                setattr(new_obj, field_name, f(field_value))
+
+            new_objects.append(new_obj)
+
+        return new_objects
+
+
     def instantiate_object(self, attrs):
         instance = self.get_instance_for_natural_key(attrs)
+        self.instance = instance
+
+        deferred_objects = []
 
         for field_name, field_value in attrs.items():
-            setattr(instance, field_name, field_value)
+            (field_object, model, direct, m2m) = instance._meta.get_field_by_name(field_name)
+
+            if direct:
+                if isinstance(field_object, models.ForeignKey):
+                    raise "Unsupported"
+                else:
+                    setattr(instance, field_name, field_value)
+            else:
+                related_model = field_object.model
+                related_objects = self.instantiate_related_objects(related_model, field_value, self.model_meta_attrs[field_name])
+                #setattr(instance, field_name, related_objects)
+                deferred_objects.append((field_name, related_objects))
 
         instance.save()
+
+        for field_name, related_objects in deferred_objects:
+            for related_object in related_objects:
+                related_object.save()
+            #setattr(instance, field_name, related_objects)
+            #instance.save()
 
 def load_attributes_from_file(path):
     f = codecs.open(path, encoding='utf-8')
