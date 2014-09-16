@@ -33,8 +33,7 @@ def live_preview(request):
     except KeyError:
         pass
 
-    SiteNode.set_page_attributes(page, content_attributes,
-                                 get_relation_mappings(os.path.join(settings.BOOTSTRAP_CONTENT_DIR, 'relations.yml')))
+    SiteNode.set_page_attributes(page, content_attributes, get_relation_mappings())
 
     return {'self': page}
 

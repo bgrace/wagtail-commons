@@ -9,7 +9,7 @@ from wagtail.wagtailadmin.edit_handlers import FieldPanel
 from wagtail.wagtailcore.fields import RichTextField
 from wagtail.wagtailcore.models import Page
 from wagtail.wagtailcore.rich_text import LINK_HANDLERS
-from wagtail.wagtailcore.util import camelcase_to_underscore
+from wagtail.wagtailcore.utils import camelcase_to_underscore
 
 logger = logging.getLogger(__name__)
 

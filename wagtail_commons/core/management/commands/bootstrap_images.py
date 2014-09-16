@@ -1,5 +1,5 @@
 from django.core.files import File
-from wagtail.wagtailimages.models import get_image_model
+from wagtail.wagtailimages.models import get_image_model, get_upload_to
 
 __author__ = 'brett@codigious.com'
 
@@ -59,12 +59,12 @@ class ImageImporter(object):
         return image
 
     def is_duplicate_name(self, path):
-        file_name = self.image_instance.get_upload_to(os.path.basename(path))
+        file_name = get_upload_to(self.image_instance, os.path.basename(path))
         image_query = self.ImageModel.objects.filter(file=file_name)
         return image_query.exists()
 
     def get_image_record(self, path):
-        file_name = self.image_instance.get_upload_to(os.path.basename(path))
+        file_name = get_upload_to(self.image_instance, os.path.basename(path))
         image = self.ImageModel.objects.get(file=file_name)
         return image
 

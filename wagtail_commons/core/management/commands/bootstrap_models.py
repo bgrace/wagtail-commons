@@ -18,6 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.template import Template, Context, add_to_builtins
 #from django.template import add_to_builtins
 from django.conf import settings
+from django.db.models.loading import get_model
 
 from wagtail.wagtailcore.models import Site
 from wagtail.wagtailcore.models import Page
@@ -62,83 +63,80 @@ def get_relation_mappings(content_root_path=None):
     return parse_file(content_root_path, 'relations.yml')
 
 
-def document_extractor(f):
-    delimiter = u'---'
-    line = f.next().rstrip(u'\n\r')
 
-    assert delimiter == line,\
-        "Malformed input in{0}\n: Line {1}\nExpected first line to only contain '{2}'".format(f, line, delimiter)
 
-    contents = dict()
-    key = None
+class ModelBuilder(object):
 
-    for line in f:
-        if line[0:3] == delimiter:
-            if line[3:5] == ' @':
-                key = line[5:-1]
-                contents[key] = StringIO()
-                continue
+    def __init__(self, content_type, model_attrs, model_meta_attrs):
+        app_label, model_name = content_type.split('.')
+        self.app_label = app_label
+        self.model_name = model_name
+        self.model_meta_attrs =model_meta_attrs
+        self.model_class = get_model(app_label, model_name)
+        self.model_attrs = model_attrs
 
-        if key:
-            unix_line = line.replace('\r\n', '\n')
-            contents[key].write(unix_line)
+        try:
+            self.natural_key = self.model_meta_attrs['natural_key']
+        except KeyError:
+            self.natural_key = None
 
-    return contents
 
+    def get_instance_for_natural_key(self, attrs):
+        if self.natural_key:
+            try:
+                return self.model_class.objects.get_by_natural_key(attrs[self.natural_key])
+            except self.model_class.DoesNotExist:
+                pass
+
+        return self.model_class()
+
+    def instantiate(self):
+        logger.info("Creating %s", self.model_class)
+
+        for attrs in self.model_attrs:
+            self.instantiate_object(attrs)
+
+    def instantiate_object(self, attrs):
+        instance = self.get_instance_for_natural_key(attrs)
+
+        for field_name, field_value in attrs.items():
+            setattr(instance, field_name, field_value)
+
+        instance.save()
 
 def load_attributes_from_file(path):
     f = codecs.open(path, encoding='utf-8')
     stream = yaml.load_all(f)
-    content_attributes = stream.next()
+    meta_attrs = stream.next()
+
+    try:
+        attrs = stream.next()
+    except StopIteration:
+        attrs = meta_attrs
+        meta_attrs = {}
+
     stream.close()
-    f.seek(0)
-    documents = document_extractor(f)
     f.close()
 
-    for key in documents:
-        rendered_markdown = Template(documents[key].getvalue()).render(Context())
-        db_safe_html = markdown.markdown(rendered_markdown, extensions=['extra', ])
-        content_attributes[key] = db_safe_html
-
-    return content_attributes
+    return attrs, meta_attrs
 
 
-def load_content(content_directory_path, content_root_path=None):
+def load_content(content_directory_path):
 
     content_directory_path = os.path.abspath(content_directory_path)
-    if content_root_path:
-        content_root_path = os.path.abspath(content_root_path)
-    else:
-        content_root_path = content_directory_path
-
+    print content_directory_path
     contents_paths = sorted(glob.glob("{0}/*.yml".format(content_directory_path)))
+    print contents_paths
 
     p = re.compile(r'(?:\d+\s+)?(.*)')  # used to strip numbers from start of file, e.g., 001 sample.yml -> sample.yml
     contents = []
 
     for path in contents_paths:
+        content_type = os.path.basename(path)[:-4]
 
-        content_attributes = load_attributes_from_file(path)
+        content_attributes, meta_attrs = load_attributes_from_file(path)
+        contents.append(ModelBuilder(content_type, model_attrs=content_attributes, model_meta_attrs=meta_attrs))
 
-        if not 'path' in content_attributes:
-            computed_path = path[len(content_root_path):-4].strip('/')  # get the bare slug
-
-            # break apart the path so we can remove leading digits from the final component
-            path_components = computed_path.split('/')
-            normalized_base_path = p.search(path_components[-1]).group(1)
-            path_components[-1] = normalized_base_path
-            computed_path = '/'.join(path_components)
-            computed_path = '/' + computed_path + '/'  # normalize by surrounding with /
-            content_attributes['path'] = computed_path
-
-        contents.append(content_attributes)
-
-    sub_directories = [os.path.join(content_directory_path, name) for name in os.listdir(content_directory_path)
-                       if os.path.isdir(os.path.join(content_directory_path, name))]
-
-    for directory in sub_directories:
-        contents = contents + load_content(content_directory_path=directory,
-                                           content_root_path=content_root_path)
 
     return contents
 
@@ -385,71 +383,26 @@ class SiteNode(object):
                                               relation_mappings=relation_mappings,
                                               dry_run=dry_run)
 
-
         
 class Command(BaseCommand):
     args = '<content directory>'
-    help = 'Creates content from markdown and yaml files, found in <content directory>/pages'
+    help = 'Creates models from markdown and yaml files, found in <content directory>/models'
 
     option_list = BaseCommand.option_list + (
         make_option('--content', dest='content_path', type='string', ),
-        make_option('--owner', dest='owner', type='string'),
-        make_option('--dry', dest='dry', action='store_true'),
-    )
-
-    option_list = BaseCommand.option_list + (
-        make_option('--content', dest='content_path', type='string', ),
-        make_option('--owner', dest='owner', type='string'),
-        make_option('--dry', dest='dry', action='store_true'),
     )
 
     def handle(self, *args, **options):
 
         if not options['content_path']:
-            raise CommandError("Pass --content <content dir>, where <content dir>/pages contain .yml files")
+            content_path = settings.BOOTSTRAP_CONTENT_DIR
+        else:
+            content_path = options['content_path']
 
-        if not options['owner']:
-            raise CommandError("Pass --owner <username>, where <username> will be the content owner")
+            print content_path
+        contents = load_content(os.path.join(content_path, 'models'))
 
-        content_path = options['content_path']
-        owner_user = User.objects.get(username=options['owner'])
-        dry_run = options['dry']
+        for builder in contents:
+            builder.instantiate()
 
-        contents = load_content(os.path.join(content_path, 'pages'))
-
-        root = Page.get_first_root_node()
-
-        home_page_candidates = [page for page in contents if page['path'] == '/']
-        assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s" %len(home_page_candidates))
-        home_page_attrs = home_page_candidates[0]
-
-        content_root = SiteNode(full_path='/', page_properties=home_page_attrs, parent_page=root)
-        for page_attrs in contents:
-            new_node = SiteNode(full_path=page_attrs['path'], page_properties=page_attrs)
-            content_root.add_node(new_node)
-
-        page_property_defaults = get_page_defaults(content_path)
-        relation_mappings = get_relation_mappings(content_path)
-
-        home_page = content_root.instantiate_page(owner_user=owner_user,
-                                                  page_property_defaults=page_property_defaults,
-                                                  relation_mappings=relation_mappings,
-                                                  dry_run=dry_run)
-
-        if dry_run:
-            self.stdout.write("Dry run, exiting without making changes")
-            return
-
-        content_root.instantiate_deferred_models(owner_user=owner_user,
-                                                 page_property_defaults=page_property_defaults,
-                                                 relation_mappings=relation_mappings,
-                                                 dry_run=dry_run)
-
-        site = Site.objects.get(is_default_site=True)
-        old_root_page = site.root_page
-        site.root_page = home_page
-        site.save()
-
-        if old_root_page:
-            old_root_page.delete()
 
