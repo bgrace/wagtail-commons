@@ -1,4 +1,5 @@
 import logging
+from wagtail_commons.core.templatetags.fragment_tags import TextFragmentNode
 import os
 
 from django.template.loader import select_template
@@ -47,6 +48,32 @@ class ProtoPageLinkHandler(object):
 
 
 LINK_HANDLERS['proto-page'] = ProtoPageLinkHandler
+
+class TemplateIntrospectable(object):
+
+    @property
+    def template_fragments(self):
+        try:
+            return self._template_fragments
+        except AttributeError:
+            template = self.get_template(None)
+            self._template_fragments = self.find_fragments(template.nodelist, [])
+            return self._template_fragments
+
+    def find_fragments(self, nodelist, text_fragment_nodes=None):
+
+        if text_fragment_nodes is None:
+            text_fragment_nodes = []
+
+        for node in nodelist:
+            if isinstance(node, TextFragmentNode):
+                text_fragment_nodes.append(node)
+            try:
+                self.find_fragments(node.nodelist, text_fragment_nodes)
+            except AttributeError:
+                pass
+
+        return text_fragment_nodes
 
 
 class PathOverrideable(object):

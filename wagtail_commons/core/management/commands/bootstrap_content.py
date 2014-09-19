@@ -7,6 +7,7 @@ import codecs
 import os
 from io import StringIO
 from optparse import make_option
+from wagtail.wagtaildocs.models import Document
 
 import yaml, yaml.parser
 import markdown
@@ -215,11 +216,11 @@ class SiteNode(object):
         page_data_mappings = relation_mappings.get(str(page.__class__.__name__))
 
         for attr, doc in page_properties.items():
-            name, index = SiteNode.attribute_regex.search(attr).groups()
+            field_name, index = SiteNode.attribute_regex.search(attr).groups()
 
             # This is a relation, they payload (doc) should be a list of related model instances to deserialize
-            field = getattr(page, attr)
-            (field_object, model, direct, m2m) = page._meta.get_field_by_name(attr)
+            field = getattr(page, field_name)
+            (field_object, model, direct, m2m) = page._meta.get_field_by_name(field_name)
 
             if direct:
                 if isinstance(field_object, models.ForeignKey):
@@ -248,11 +249,6 @@ class SiteNode(object):
                 # @-notation was used, so this is a markdown-rendered text field. index is the subfield, doc is the text
                 if index:
                     create_attrs = {name: interpolate(page, index, doc, val) for name, val in mappings.items()}
-
-                    # The definition itself will have values and attrs, so apply them to the object...
-                    for rel_attr, rel_doc in doc.items():
-                        create_attrs[rel_attr] = rel_doc
-
                     relation.add(model(**create_attrs))
 
                 # This relation is defined as basic YAML, without any markdown rendering
@@ -262,7 +258,12 @@ class SiteNode(object):
 
                     defer_assignment = False
                     for related_object in doc:
-                        create_attrs = {name: interpolate(page, index, doc, val) for name, val in mappings.items()}
+
+                        common_keys = set(mappings).intersection(related_object)
+                        create_attrs = {}
+                        for k in common_keys:
+                            create_attrs[k] = interpolate(page, index, doc, mappings[k])
+
 
                         for rel_attr, rel_doc in related_object.items():
                             if rel_attr in create_attrs:
@@ -352,12 +353,29 @@ class SiteNode(object):
                 logger.critical("Couldn't find page %s (%s)", val, url_path)
                 return None
 
+        def image_for_name(val):
+            ImageModel = get_image_model()
+            instance = ImageModel()
+            return ImageModel.objects.get(file=get_upload_to(instance, val))
+
+        def document_for_name(val):
+            return Document.objects.get(file=os.path.join('documents', val))
+
+        def to_markdown(val):
+            return markdown.markdown(val)
+
         if name is None:
             return identity
         elif '$page' == name:
             return identity
         elif '$path' == name:
             return page_for_path
+        elif '$image' == name:
+            return image_for_name
+        elif '$document' == name:
+            return document_for_name
+        elif 'markdown' == name:
+            return to_markdown
         else:
             logger.critical("No transformation %s", name)
 
@@ -423,7 +441,17 @@ class Command(BaseCommand):
 
         contents = load_content(os.path.join(content_path, 'pages'))
 
+        try:
+            site = Site.objects.get(is_default_site=True)
+            if site.root_page:
+                site.root_page.delete()
+        except Site.DoesNotExist:
+            site = Site(is_default_site=True)
+
+
         root = Page.get_first_root_node()
+        for child in root.get_children():
+            child.delete()
 
         home_page_candidates = [page for page in contents if page['path'] == '/']
         assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s" %len(home_page_candidates))
@@ -451,11 +479,7 @@ class Command(BaseCommand):
                                                  relation_mappings=relation_mappings,
                                                  dry_run=dry_run)
 
-        site = Site.objects.get(is_default_site=True)
-        old_root_page = site.root_page
         site.root_page = home_page
         site.save()
 
-        if old_root_page:
-            old_root_page.delete()
 
