@@ -38,6 +38,10 @@ add_to_builtins("wagtail_commons.core.templatetags.bootstrap_wagtail_tags")
 logger = logging.getLogger('wagtail_commons.core')
 
 
+class BootstrapError(Exception):
+    pass
+
+
 def get_page_type_class(content_type):
     (app_label, model) = content_type.split('.')
     page_type = ContentType.objects.get(app_label=app_label, model=model)
@@ -233,10 +237,10 @@ class SiteNode(object):
                         if image_query.exists():
                             setattr(page, attr, image_query.get())
                         else:
-                            logger.fatal("Could not find image %s on page %s", doc, page.url)
+                            logger.fatal("Could not find image %s on page %s", doc, page_properties['path'])
                             setattr(page, attr, None)
                     else:
-                        logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page.url)
+                        logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page_properties['path'])
                 else: # we don't yet support a way of setting a one-to-one here
                     setattr(page, attr, doc)
 
@@ -356,7 +360,15 @@ class SiteNode(object):
         def image_for_name(val):
             ImageModel = get_image_model()
             instance = ImageModel()
-            return ImageModel.objects.get(file=get_upload_to(instance, val))
+
+            file_name = get_upload_to(instance, val)
+            image_query = ImageModel.objects.filter(file=file_name)
+            if image_query.exists():
+                return image_query.get()
+            else:
+                logger.fatal("Could not find image %s", val)
+                raise BootstrapError
+            return None
 
         def document_for_name(val):
             return Document.objects.get(file=os.path.join('documents', val))
@@ -395,8 +407,11 @@ class SiteNode(object):
                 new_obj = model()
 
                 for attr, val in object.items():
-                    transformation = self.transformation_for_name(model_mapper.get(attr, None))
-                    setattr(new_obj, attr, transformation(val))
+                    try:
+                        transformation = self.transformation_for_name(model_mapper.get(attr, None))
+                        setattr(new_obj, attr, transformation(val))
+                    except BootstrapError, bex:
+                        logger.fatal("Could not bootstrap %s on page %s with %s", relation_name, page.url_path, objects)
 
                 related_objects.append(new_obj)
 
