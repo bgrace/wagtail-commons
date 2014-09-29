@@ -1,3 +1,4 @@
+import logging
 from django.core.files import File
 from wagtail.wagtailimages.models import get_image_model
 
@@ -19,6 +20,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 # <embed alt="urn" embedtype="image" format="right" id="1"/>
 
+logger = logging.getLogger(__name__)
 
 class ImageImporter(object):
 
@@ -35,7 +37,8 @@ class ImageImporter(object):
         self.results = {'total': 0,
                         'unchanged': 0,
                         'altered': 0,
-                        'inserted': 0}
+                        'inserted': 0,
+                        'ignored': 0}
 
     def increment_stat(self, stat):
         self.results[stat] += 1
@@ -48,12 +51,16 @@ class ImageImporter(object):
 
         image = self.ImageModel(uploaded_by_user=self.owner)
 
-        with open(path, 'rb') as image_file:
-            image.file.save(basename, File(image_file), save=True)
+        try:
+            with open(path, 'rb') as image_file:
+                image.file.save(basename, File(image_file), save=True)
 
-        image.title = basename
-        image.save()
-        return image
+            image.title = basename
+            image.save()
+            return image
+        except TypeError, terror:
+            logger.fatal("Not an image? %s", path)
+            return None
 
     def update_file(self, path):
         basename = os.path.basename(path)
@@ -95,8 +102,10 @@ class ImageImporter(object):
                         self.increment_stat('altered')
                 else:
                     self.stdout.write("Adding new image {0}".format(path))
-                    self.add_file(path)
-                    self.increment_stat('inserted')
+                    if self.add_file(path):
+                        self.increment_stat('inserted')
+                    else:
+                        self.increment_stat('ignored')
 
     def get_results(self):
         return self.results
@@ -136,10 +145,11 @@ class Command(BaseCommand):
         importer = ImageImporter(path=content_path, owner=owner, stdout=self.stdout, stderr=self.stderr)
         importer.import_images()
         results = importer.get_results()
-        print "Total: {0}, unchanged: {1}, replaced: {2}, new: {3}".format(results['total'],
-                                                                           results['unchanged'],
-                                                                           results['altered'],
-                                                                           results['inserted'])
+        print "Total: {0}, unchanged: {1}, replaced: {2}, new: {3}, ignored: {4}".format(results['total'],
+                                                                                         results['unchanged'],
+                                                                                         results['altered'],
+                                                                                         results['inserted'],
+                                                                                         results['ignored'])
 
 
 
