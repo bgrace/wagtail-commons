@@ -200,9 +200,12 @@ class SiteNode(object):
                 self.children.append(intermediate_node)
                 intermediate_node.add_node(new_node)
 
-
     @staticmethod
     def set_page_attributes(page, page_properties, relation_mappings=None):
+
+        def get_direct_field_mappings(field_object):
+            return None
+
 
         def interpolate(page, index, doc, val):
             if "$page" == val:
@@ -240,7 +243,9 @@ class SiteNode(object):
                             logger.fatal("Could not find image %s on page %s", doc, page_properties['path'])
                             setattr(page, attr, None)
                     else:
+                        type_mapper = get_direct_field_mappings(field_object)
                         logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page_properties['path'])
+
                 else: # we don't yet support a way of setting a one-to-one here
                     setattr(page, attr, doc)
 
@@ -485,6 +490,9 @@ class Command(BaseCommand):
                                                   relation_mappings=relation_mappings,
                                                   dry_run=dry_run)
 
+        site.root_page = home_page
+        site.save()
+
         if dry_run:
             self.stdout.write("Dry run, exiting without making changes")
             return
@@ -493,8 +501,5 @@ class Command(BaseCommand):
                                                  page_property_defaults=page_property_defaults,
                                                  relation_mappings=relation_mappings,
                                                  dry_run=dry_run)
-
-        site.root_page = home_page
-        site.save()
 
 
