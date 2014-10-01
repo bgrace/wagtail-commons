@@ -2,7 +2,7 @@ import logging
 from wagtail_commons.core.templatetags.fragment_tags import TextFragmentNode
 import os
 
-from django.template.loader import select_template
+from django.template.loader import select_template, get_template
 from django.utils.html import escape
 from django.db import models
 
@@ -82,6 +82,9 @@ class PathOverrideable(object):
         try:
             return self._path_overrideable_template
         except AttributeError:
+
+            if not self.url:
+                return get_template(self.template)
 
             path = self.url.strip('/')
             model_name = camelcase_to_underscore(self.specific_class.__name__)

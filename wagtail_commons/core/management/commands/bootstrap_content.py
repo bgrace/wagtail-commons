@@ -308,7 +308,6 @@ class SiteNode(object):
         return deferred_relations
 
 
-
     def instantiate_page(self, owner_user,
                          page_property_defaults=None,
                          relation_mappings=None,
