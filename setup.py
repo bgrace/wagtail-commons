@@ -5,7 +5,7 @@ setup(
     version='0.0.1',
     author=u'Brett Grace',
     author_email='brett@codigious.com',
-    packages=['wagtail_commons'],
+    packages=['wagtail_commons', 'wagtail_commons.core'],
     url='http://github.com/bgrace/wagtail-commons',
     license='BSD licence, see LICENCE file',
     description='Utility commands and mixins for Wagtail CMS',
