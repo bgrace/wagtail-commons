@@ -1,3 +1,5 @@
+from django.conf import settings
+
 __author__ = 'brett@codigious.com'
 
 import codecs
@@ -21,10 +23,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        if not options['content_path']:
-            raise CommandError("Pass --content <content dir>, where <content dir>/users.yml contains users")
+        if options['content_path']:
+            path = options['content_path']
+        elif settings.BOOTSTRAP_CONTENT_DIR:
+            path = settings.BOOTSTRAP_CONTENT_DIR
+        else:
+            raise CommandError("Pass --content <content dir>, where <content dir>/pages contain .yml files")
 
-        path = options['content_path']
         if not os.path.isdir(path):
             raise CommandError("Content dir '{0}' does not exist or is not a directory".format(path))
 
