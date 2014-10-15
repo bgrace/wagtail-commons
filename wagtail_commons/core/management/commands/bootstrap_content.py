@@ -326,6 +326,7 @@ class SiteNode(object):
         page = page_class(owner=owner_user)
         page.live = True
         page.has_unpublished_changes = False
+        page.locked = False
         page.show_in_menus = True
         page.slug = self.slug[0:50]
 
