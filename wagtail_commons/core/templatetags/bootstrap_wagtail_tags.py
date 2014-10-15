@@ -4,6 +4,12 @@ from wagtail.wagtailcore.models import Page
 from wagtail.wagtailcore.rich_text import EMBED_HANDLERS, LINK_HANDLERS
 from wagtail.wagtailimages.models import get_image_model
 
+try:
+    from wagtail.wagtailimages.models import get_upload_to
+except ImportError:
+    def get_upload_to(instance, path):
+        return instance.get_upload_to(path)
+
 __author__ = 'bgrace'
 
 register = template.Library()
@@ -35,7 +41,7 @@ def image(image_filename, format, alt_text):
 
     Image = get_image_model()
     instance = Image()
-    path = instance.get_upload_to(image_filename)
+    path = get_upload_to(instance, image_filename)
     query = Image.objects.filter(file=path)
     if not query.exists():
         return "<span style='background: red; color: white'>MISSING IMAGE %s</span>" % image_filename

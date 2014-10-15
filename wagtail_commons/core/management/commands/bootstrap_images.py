@@ -1,4 +1,5 @@
 import logging
+from django.conf import settings
 from django.core.files import File
 from wagtail.wagtailimages.models import get_image_model
 
@@ -123,24 +124,28 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        if not options['content_path']:
-            raise CommandError("Pass --content <content dir>, where <content dir>/image-library contains images")
+        if options['content_path']:
+            path = options['content_path']
+        elif settings.BOOTSTRAP_CONTENT_DIR:
+            path = settings.BOOTSTRAP_CONTENT_DIR
+        else:
+            raise CommandError("Pass --content <content dir>, where <content dir>/pages contain .yml files")
+
 
         if not options['owner']:
-            raise CommandError("Pass --owner <username>, where <username> will be the content owner")
+            owner = None
+        else:
+            try:
+                owner = User.objects.get(username=options['owner'])
+            except User.DoesNotExist:
+                raise CommandError("Owner with username '{0}' does not exist".format(options['owner']))
 
-        path = options['content_path']
         if not os.path.isdir(path):
             raise CommandError("Content dir '{0}' does not exist or is not a directory".format(path))
 
         content_path = os.path.join(path, 'image-library')
         if not os.path.isdir(content_path):
             raise CommandError("Could not find image library '{0}'".format(content_path))
-
-        try:
-            owner = User.objects.get(username=options['owner'])
-        except User.DoesNotExist:
-            raise CommandError("Owner with username '{0}' does not exist".format(options['owner']))
 
         importer = ImageImporter(path=content_path, owner=owner, stdout=self.stdout, stderr=self.stderr)
         importer.import_images()
