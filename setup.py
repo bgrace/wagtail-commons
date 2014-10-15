@@ -1,11 +1,11 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(
     name='wagtail-commons',
-    version='0.0.1',
+    version='0.0.2',
     author=u'Brett Grace',
     author_email='brett@codigious.com',
-    packages=['wagtail_commons'],
+    packages=find_packages(),
     url='http://github.com/bgrace/wagtail-commons',
     license='BSD licence, see LICENCE file',
     description='Utility commands and mixins for Wagtail CMS',
