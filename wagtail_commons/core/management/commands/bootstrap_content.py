@@ -448,14 +448,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        if not options['content_path']:
+        if options['content_path']:
+            content_path = options['content_path']
+        elif settings.BOOTSTRAP_CONTENT_DIR:
+            content_path = settings.BOOTSTRAP_CONTENT_DIR
+        else:
             raise CommandError("Pass --content <content dir>, where <content dir>/pages contain .yml files")
 
-        if not options['owner']:
-            raise CommandError("Pass --owner <username>, where <username> will be the content owner")
+        if options['owner']:
+            owner_user = User.objects.get(username=options['owner'])
+        else:
+            owner_user = None
+            #raise CommandError("Pass --owner <username>, where <username> will be the content owner")
 
-        content_path = options['content_path']
-        owner_user = User.objects.get(username=options['owner'])
         dry_run = options['dry']
 
         contents = load_content(os.path.join(content_path, 'pages'))
