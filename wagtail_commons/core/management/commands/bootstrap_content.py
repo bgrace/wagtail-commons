@@ -1,13 +1,11 @@
 import logging
-from django.db.models.fields.related import RelatedField
+import traceback
 import re
-
 import glob
 import codecs
 import os
 from io import StringIO
 from optparse import make_option
-from wagtail.wagtaildocs.models import Document
 
 import yaml, yaml.parser
 import markdown
@@ -20,8 +18,8 @@ from django.template import Template, Context, add_to_builtins
 #from django.template import add_to_builtins
 from django.conf import settings
 
-from wagtail.wagtailcore.models import Site
-from wagtail.wagtailcore.models import Page
+from wagtail.wagtaildocs.models import Document
+from wagtail.wagtailcore.models import Site, Page
 from wagtail.wagtailimages.models import get_image_model
 
 try:
@@ -48,34 +46,43 @@ def get_page_type_class(content_type):
     return page_type.model_class()
 
 
+def page_for_path(val):
+    url_path = '/' + val.strip('/') + '/'
+    try:
+        return Page.objects.get(url_path=url_path).specific
+    except Page.DoesNotExist:
+        logger.critical("Couldn't find page %s (%s)", val, url_path)
+        return None
+
 def parse_file(content_root_path, name):
+    if not content_root_path:
+        content_root_path = settings.BOOTSTRAP_CONTENT_DIR
+
     path = os.path.join(content_root_path, name)
     if not os.path.isfile(path):
         return {}
 
-    f = file(path)
+    f = open(path, 'r', encoding='utf8')
     stream = yaml.load_all(f)
-    doc = stream.next()
+    doc = next(stream)
     stream.close()
     f.close()
     return doc
 
+def get_sites(content_root_path=None):
+    return parse_file(content_root_path, 'sites.yml')
 
 def get_page_defaults(content_root_path=None):
-    if not content_root_path:
-        content_root_path = settings.BOOTSTRAP_CONTENT_DIR
     return parse_file(content_root_path, 'pages.yml')
 
 
 def get_relation_mappings(content_root_path=None):
-    if not content_root_path:
-        content_root_path = settings.BOOTSTRAP_CONTENT_DIR
     return parse_file(content_root_path, 'relations.yml')
 
 
 def document_extractor(f):
     delimiter = u'---'
-    line = f.next().rstrip(u'\n\r')
+    line = next(f).rstrip(u'\n\r')
 
     assert delimiter == line,\
         "Malformed input in{0}\n: Line {1}\nExpected first line to only contain '{2}'".format(f, line, delimiter)
@@ -100,7 +107,7 @@ def document_extractor(f):
 def load_attributes_from_file(path):
     f = codecs.open(path, encoding='utf-8')
     stream = yaml.load_all(f)
-    content_attributes = stream.next()
+    content_attributes = next(stream)
     stream.close()
     f.seek(0)
     documents = document_extractor(f)
@@ -154,7 +161,8 @@ def load_content(content_directory_path, content_root_path=None):
     return contents
 
 
-class SiteNode(object):
+
+class SiteNode:
 
     attribute_regex = re.compile(r'(\w*)(?:\[(\w*)\])?')
 
@@ -319,7 +327,7 @@ class SiteNode(object):
         if not relation_mappings:
             relation_mappings = dict()
 
-        page_properties = dict(page_property_defaults.items() + self.page_properties.items())
+        page_properties = dict(page_property_defaults, **self.page_properties)
         page_class = get_page_type_class(page_properties['type'])
         page_properties.pop('type', None)
 
@@ -331,7 +339,10 @@ class SiteNode(object):
         page.slug = self.slug[0:50]
 
         # for all other page attributes, set them dynamically
-        page.title = page_properties['title']
+        try:
+            page.title = page_properties['title']
+        except KeyError:
+            raise KeyError("{full_path} is missing the 'title' property".format(full_path=self.full_path))
 
         self.deferred_relations = self.set_page_attributes(page, page_properties, relation_mappings=relation_mappings)
 
@@ -343,8 +354,13 @@ class SiteNode(object):
 
         for child in self.children:
             child.parent_page = self.page
-            child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults,
-                                   dry_run=dry_run, relation_mappings=relation_mappings)
+            try:
+                child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults,
+                dry_run=dry_run, relation_mappings=relation_mappings)
+            except Exception as ex:
+                print(traceback.format_exc())
+                print("This exception was thrown while trying to process {full_path}, with properties {properties}".
+                      format(full_path=child.full_path, properties=child.page_properties))
 
         return self.page
 
@@ -354,13 +370,6 @@ class SiteNode(object):
         def identity(val):
             return val
 
-        def page_for_path(val):
-            url_path = '///' + val.strip('/') + '/'
-            try:
-                return Page.objects.get(url_path=url_path).specific
-            except Page.DoesNotExist:
-                logger.critical("Couldn't find page %s (%s)", val, url_path)
-                return None
 
         def image_for_name(val):
             ImageModel = get_image_model()
@@ -415,7 +424,7 @@ class SiteNode(object):
                     try:
                         transformation = self.transformation_for_name(model_mapper.get(attr, None))
                         setattr(new_obj, attr, transformation(val))
-                    except BootstrapError, bex:
+                    except BootstrapError as bex:
                         logger.fatal("Could not bootstrap %s on page %s with %s", relation_name, page.url_path, objects)
 
                 related_objects.append(new_obj)
@@ -430,7 +439,18 @@ class SiteNode(object):
                                               dry_run=dry_run)
 
 
-        
+
+class RootNode(SiteNode):
+    def instantiate_page(self, owner_user,
+                         page_property_defaults=None,
+                         relation_mappings=None,
+                         dry_run=True):
+
+        for child in self.children:
+            child.parent_page = self.parent_page
+            child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults,
+                                   dry_run=dry_run, relation_mappings=relation_mappings)
+
 class Command(BaseCommand):
     args = '<content directory>'
     help = 'Creates content from markdown and yaml files, found in <content directory>/pages'
@@ -466,23 +486,14 @@ class Command(BaseCommand):
 
         contents = load_content(os.path.join(content_path, 'pages'))
 
-        try:
-            site = Site.objects.get(is_default_site=True)
-            if site.root_page:
-                site.root_page.delete()
-        except Site.DoesNotExist:
-            site = Site(is_default_site=True)
+        for site in Site.objects.all():
+            site.delete()
 
+        for page in Page.objects.filter(id__gt=1):
+            page.delete()
 
         root = Page.get_first_root_node()
-        for child in root.get_children():
-            child.delete()
-
-        home_page_candidates = [page for page in contents if page['path'] == '/']
-        assert len(home_page_candidates) == 1, ("Expected one page with a path of '/', got %s" %len(home_page_candidates))
-        home_page_attrs = home_page_candidates[0]
-
-        content_root = SiteNode(full_path='/', page_properties=home_page_attrs, parent_page=root)
+        content_root = RootNode('/', page_properties={}, parent_page=root)
         for page_attrs in contents:
             new_node = SiteNode(full_path=page_attrs['path'], page_properties=page_attrs)
             content_root.add_node(new_node)
@@ -495,8 +506,16 @@ class Command(BaseCommand):
                                                   relation_mappings=relation_mappings,
                                                   dry_run=dry_run)
 
-        site.root_page = home_page
-        site.save()
+
+        sites = []
+        for site in get_sites(content_path):
+            sites.append(Site.objects.create(hostname=site['hostname'],
+                                             port=int(site['port']),
+                                             root_page=page_for_path(site['root_page'])))
+
+        default_site = sites[0]
+        default_site.is_default_site = True
+        default_site.save()
 
         if dry_run:
             self.stdout.write("Dry run, exiting without making changes")

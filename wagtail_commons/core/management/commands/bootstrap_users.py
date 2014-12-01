@@ -39,7 +39,7 @@ class Command(BaseCommand):
 
         f = codecs.open(content_path, encoding='utf-8')
         stream = yaml.load_all(f)
-        users = stream.next()
+        users = next(stream)
         f.close()
 
         for user in users:
