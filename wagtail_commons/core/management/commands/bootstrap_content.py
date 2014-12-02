@@ -15,7 +15,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.template import Template, Context, add_to_builtins
-#from django.template import add_to_builtins
+# from django.template import add_to_builtins
 from django.conf import settings
 
 from wagtail.wagtaildocs.models import Document
@@ -27,8 +27,6 @@ try:
 except ImportError:
     def get_upload_to(instance, path):
         return instance.get_upload_to(path)
-
-
 
 __author__ = 'brett@codigious.com'
 
@@ -54,6 +52,7 @@ def page_for_path(val):
         logger.critical("Couldn't find page %s (%s)", val, url_path)
         return None
 
+
 def parse_file(content_root_path, name):
     if not content_root_path:
         content_root_path = settings.BOOTSTRAP_CONTENT_DIR
@@ -69,8 +68,10 @@ def parse_file(content_root_path, name):
     f.close()
     return doc
 
+
 def get_sites(content_root_path=None):
     return parse_file(content_root_path, 'sites.yml')
+
 
 def get_page_defaults(content_root_path=None):
     return parse_file(content_root_path, 'pages.yml')
@@ -84,7 +85,7 @@ def document_extractor(f):
     delimiter = u'---'
     line = next(f).rstrip(u'\n\r')
 
-    assert delimiter == line,\
+    assert delimiter == line, \
         "Malformed input in{0}\n: Line {1}\nExpected first line to only contain '{2}'".format(f, line, delimiter)
 
     contents = dict()
@@ -122,7 +123,6 @@ def load_attributes_from_file(path):
 
 
 def load_content(content_directory_path, content_root_path=None):
-
     content_directory_path = os.path.abspath(content_directory_path)
     if content_root_path:
         content_root_path = os.path.abspath(content_root_path)
@@ -161,16 +161,14 @@ def load_content(content_directory_path, content_root_path=None):
     return contents
 
 
-
 class SiteNode:
-
     attribute_regex = re.compile(r'(\w*)(?:\[(\w*)\])?')
 
     def __init__(self, full_path, page_properties=None, parent_page=None):
         self.children = []
-        self.full_path = full_path.rstrip('/')+'/'
+        self.full_path = full_path.rstrip('/') + '/'
         last_component_index = self.full_path[0:-1].rfind('/')
-        self.slug = self.full_path[last_component_index+1:-1]
+        self.slug = self.full_path[last_component_index + 1:-1]
         if not self.slug and self.full_path == '/':
             self.slug = '/'
         self.page_properties = page_properties
@@ -184,7 +182,7 @@ class SiteNode:
     def add_node(self, new_node):
         # we only care about the part of the new node's path that is not a prefix of this node's path
         assert 0 == new_node.full_path.find(self.full_path), "Trying to add a node which is not a proper descendent"
-        assert len(new_node.full_path) >= len(self.full_path), "New node too short to be placed here: {0} vs. {1}".\
+        assert len(new_node.full_path) >= len(self.full_path), "New node too short to be placed here: {0} vs. {1}". \
             format(new_node.full_path, self.full_path)
 
         if new_node.full_path == self.full_path:
@@ -192,7 +190,7 @@ class SiteNode:
             return
 
         remainder_path = new_node.full_path[len(self.full_path):]
-        remainder_path = '/'+remainder_path.strip('/')+'/'
+        remainder_path = '/' + remainder_path.strip('/') + '/'
         this_node_slug = remainder_path[1:remainder_path.find('/', 1)]
 
         ancestor = [child for child in self.children if child.slug == this_node_slug]
@@ -204,7 +202,7 @@ class SiteNode:
             if remainder_path.strip('/') == this_node_slug:  # leaf node
                 self.children.append(new_node)
             else:
-                intermediate_node = SiteNode(full_path=self.full_path+this_node_slug)
+                intermediate_node = SiteNode(full_path=self.full_path + this_node_slug)
                 self.children.append(intermediate_node)
                 intermediate_node.add_node(new_node)
 
@@ -254,7 +252,7 @@ class SiteNode:
                         type_mapper = get_direct_field_mappings(field_object)
                         logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page_properties['path'])
 
-                else: # we don't yet support a way of setting a one-to-one here
+                else:  # we don't yet support a way of setting a one-to-one here
                     setattr(page, attr, doc)
 
             # It's a relation, there are two supported syntaxes
@@ -280,7 +278,6 @@ class SiteNode:
                         create_attrs = {}
                         for k in common_keys:
                             create_attrs[k] = interpolate(page, index, doc, mappings[k])
-
 
                         for rel_attr, rel_doc in related_object.items():
                             if rel_attr in create_attrs:
@@ -356,7 +353,7 @@ class SiteNode:
             child.parent_page = self.page
             try:
                 child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults,
-                dry_run=dry_run, relation_mappings=relation_mappings)
+                                       dry_run=dry_run, relation_mappings=relation_mappings)
             except Exception as ex:
                 print(traceback.format_exc())
                 print("This exception was thrown while trying to process {full_path}, with properties {properties}".
@@ -439,17 +436,16 @@ class SiteNode:
                                               dry_run=dry_run)
 
 
-
 class RootNode(SiteNode):
     def instantiate_page(self, owner_user,
                          page_property_defaults=None,
                          relation_mappings=None,
                          dry_run=True):
-
         for child in self.children:
             child.parent_page = self.parent_page
             child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults,
                                    dry_run=dry_run, relation_mappings=relation_mappings)
+
 
 class Command(BaseCommand):
     args = '<content directory>'
@@ -501,11 +497,10 @@ class Command(BaseCommand):
         page_property_defaults = get_page_defaults(content_path)
         relation_mappings = get_relation_mappings(content_path)
 
-        home_page = content_root.instantiate_page(owner_user=owner_user,
-                                                  page_property_defaults=page_property_defaults,
-                                                  relation_mappings=relation_mappings,
-                                                  dry_run=dry_run)
-
+        content_root.instantiate_page(owner_user=owner_user,
+                                      page_property_defaults=page_property_defaults,
+                                      relation_mappings=relation_mappings,
+                                      dry_run=dry_run)
 
         sites = []
         for site in get_sites(content_path):

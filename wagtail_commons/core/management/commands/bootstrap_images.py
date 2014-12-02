@@ -59,7 +59,7 @@ class ImageImporter(object):
             image.title = basename
             image.save()
             return image
-        except TypeError, terror:
+        except TypeError:
             logger.fatal("Not an image? %s", path)
             return None
 
@@ -150,11 +150,11 @@ class Command(BaseCommand):
         importer = ImageImporter(path=content_path, owner=owner, stdout=self.stdout, stderr=self.stderr)
         importer.import_images()
         results = importer.get_results()
-        print "Total: {0}, unchanged: {1}, replaced: {2}, new: {3}, ignored: {4}".format(results['total'],
+        print("Total: {0}, unchanged: {1}, replaced: {2}, new: {3}, ignored: {4}".format(results['total'],
                                                                                          results['unchanged'],
                                                                                          results['altered'],
                                                                                          results['inserted'],
-                                                                                         results['ignored'])
+                                                                                         results['ignored']))
 
 
 
