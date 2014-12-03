@@ -93,8 +93,10 @@ def document_extractor(f):
 
     for line in f:
         if line[0:3] == delimiter:
-            if line[3:5] == ' @':
-                key = line[5:-1]
+            tokens = line.split()
+
+            if len(tokens) == 2 and tokens[1][0] == '@':
+                key = tokens[1][1:]
                 contents[key] = StringIO()
                 continue
 
@@ -327,6 +329,7 @@ class SiteNode:
         page_properties = dict(page_property_defaults, **self.page_properties)
         page_class = get_page_type_class(page_properties['type'])
         page_properties.pop('type', None)
+        page_properties.pop('path', None)
 
         page = page_class(owner=owner_user)
         page.live = True
@@ -346,6 +349,7 @@ class SiteNode:
         if not dry_run:
             self.parent_page.add_child(instance=page)
             page.save()
+            page.save_revision(submitted_for_moderation=False).publish()
 
         self.page = page
 
