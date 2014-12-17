@@ -6,6 +6,7 @@ import codecs
 import os
 from io import StringIO
 from optparse import make_option
+from collections import ChainMap
 
 import yaml, yaml.parser
 import markdown
@@ -15,7 +16,6 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.template import Template, Context, add_to_builtins
-# from django.template import add_to_builtins
 from django.conf import settings
 
 from wagtail.wagtaildocs.models import Document
@@ -432,6 +432,7 @@ class SiteNode:
 
             setattr(page, relation_name, related_objects)
             page.save()
+            page.save_revision(submitted_for_moderation=False).publish()
 
         for child in self.children:
             child.instantiate_deferred_models(owner_user,
@@ -449,6 +450,16 @@ class RootNode(SiteNode):
             child.parent_page = self.parent_page
             child.instantiate_page(owner_user=owner_user, page_property_defaults=page_property_defaults,
                                    dry_run=dry_run, relation_mappings=relation_mappings)
+
+    def instantiate_deferred_models(self, owner_user,
+                                    page_property_defaults=None,
+                                    relation_mappings=None,
+                                    dry_run=True):
+        for child in self.children:
+            child.instantiate_deferred_models(owner_user,
+                                              page_property_defaults=page_property_defaults,
+                                              relation_mappings=relation_mappings,
+                                              dry_run=dry_run)
 
 
 class Command(BaseCommand):

@@ -1,16 +1,16 @@
 import logging
-from django.db.models.fields.related import RelatedField
 import re
-
 import glob
 import codecs
 import os
 from io import StringIO
 from optparse import make_option
+from collections import ChainMap
 
 import yaml, yaml.parser
 import markdown
 
+from django.db.models.fields.related import RelatedField
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models
 from django.contrib.auth.models import User
@@ -29,6 +29,8 @@ try:
 except ImportError:
     def get_upload_to(instance, path):
         return instance.get_upload_to(path)
+
+from . import utils
 
 __author__ = 'brett@codigious.com'
 
@@ -65,8 +67,6 @@ def get_relation_mappings(content_root_path=None):
     if not content_root_path:
         content_root_path = settings.BOOTSTRAP_CONTENT_DIR
     return parse_file(content_root_path, 'relations.yml')
-
-
 
 
 class ModelBuilder(object):
@@ -110,8 +110,7 @@ class ModelBuilder(object):
             return self.instance
 
         def path(val):
-            url_path = '///' + val.strip('/') + '/'
-            return Page.objects.get(url_path=url_path).specific
+            return utils.page_for_path(val).specific
 
         mapping = {'$identity': identity,
                    '$self': this,
@@ -129,7 +128,7 @@ class ModelBuilder(object):
         for obj_attrs in related_objects:
             new_obj = related_model()
 
-            input_attrs = dict(meta_attrs.items() + obj_attrs.items())
+            input_attrs = ChainMap(obj_attrs, meta_attrs)
             for field_name, field_value in input_attrs.items():
                 f = self.interpolate(field_name, meta_attrs)
                 setattr(new_obj, field_name, f(field_value))
@@ -173,10 +172,10 @@ class ModelBuilder(object):
 def load_attributes_from_file(path):
     f = codecs.open(path, encoding='utf-8')
     stream = yaml.load_all(f)
-    meta_attrs = stream.next()
+    meta_attrs = next(stream)
 
     try:
-        attrs = stream.next()
+        attrs = next(stream)
     except StopIteration:
         attrs = meta_attrs
         meta_attrs = {}
@@ -190,9 +189,7 @@ def load_attributes_from_file(path):
 def load_content(content_directory_path):
 
     content_directory_path = os.path.abspath(content_directory_path)
-    print content_directory_path
     contents_paths = sorted(glob.glob("{0}/*.yml".format(content_directory_path)))
-    print contents_paths
 
     p = re.compile(r'(?:\d+\s+)?(.*)')  # used to strip numbers from start of file, e.g., 001 sample.yml -> sample.yml
     contents = []
@@ -336,11 +333,6 @@ class SiteNode(object):
 
                             create_attrs[rel_attr] = rel_doc
 
-                        # for rel_doc in create_attrs.values():
-                        #     print "Checking {}".format(rel_doc)
-                        #     if isinstance(rel_doc, str):
-                        #         defer_assignment = defer_assignment or '$' == rel_doc[0]
-
                         related_objects.append(create_attrs)
 
                     if defer_assignment:
@@ -465,7 +457,6 @@ class Command(BaseCommand):
         else:
             content_path = options['content_path']
 
-            print content_path
         contents = load_content(os.path.join(content_path, 'models'))
 
         for builder in contents:

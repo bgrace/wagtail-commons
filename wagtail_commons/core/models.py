@@ -14,7 +14,6 @@ from wagtail.wagtailcore.utils import camelcase_to_underscore
 
 logger = logging.getLogger(__name__)
 
-
 class ProtoPageLinkHandler(object):
 
     @staticmethod
