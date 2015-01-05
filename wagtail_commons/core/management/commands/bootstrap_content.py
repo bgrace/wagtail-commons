@@ -22,6 +22,8 @@ from wagtail.wagtaildocs.models import Document
 from wagtail.wagtailcore.models import Site, Page
 from wagtail.wagtailimages.models import get_image_model
 
+from .utils import transformation_for_name, BootstrapError
+
 try:
     from wagtail.wagtailimages.models import get_upload_to
 except ImportError:
@@ -34,13 +36,11 @@ add_to_builtins("wagtail_commons.core.templatetags.bootstrap_wagtail_tags")
 logger = logging.getLogger('wagtail_commons.core')
 
 
-class BootstrapError(Exception):
-    pass
 
 
 def get_page_type_class(content_type):
     (app_label, model) = content_type.split('.')
-    page_type = ContentType.objects.get(app_label=app_label, model=model)
+    page_type = ContentType.objects.get(app_label=app_label, model=model.lower())
     return page_type.model_class()
 
 
@@ -214,7 +214,6 @@ class SiteNode:
         def get_direct_field_mappings(field_object):
             return None
 
-
         def interpolate(page, index, doc, val):
             if "$page" == val:
                 return page
@@ -366,46 +365,6 @@ class SiteNode:
         return self.page
 
 
-    def transformation_for_name(self, name):
-
-        def identity(val):
-            return val
-
-
-        def image_for_name(val):
-            ImageModel = get_image_model()
-            instance = ImageModel()
-
-            file_name = get_upload_to(instance, val)
-            image_query = ImageModel.objects.filter(file=file_name)
-            if image_query.exists():
-                return image_query.get()
-            else:
-                logger.fatal("Could not find image %s", val)
-                raise BootstrapError
-            return None
-
-        def document_for_name(val):
-            return Document.objects.get(file=os.path.join('documents', val))
-
-        def to_markdown(val):
-            return markdown.markdown(val)
-
-        if name is None:
-            return identity
-        elif '$page' == name:
-            return identity
-        elif '$path' == name:
-            return page_for_path
-        elif '$image' == name:
-            return image_for_name
-        elif '$document' == name:
-            return document_for_name
-        elif 'markdown' == name:
-            return to_markdown
-        else:
-            logger.critical("No transformation %s", name)
-
     def instantiate_deferred_models(self, owner_user,
                                     page_property_defaults=None,
                                     relation_mappings=None,
@@ -423,7 +382,7 @@ class SiteNode:
 
                 for attr, val in object.items():
                     try:
-                        transformation = self.transformation_for_name(model_mapper.get(attr, None))
+                        transformation = transformation_for_name(model_mapper.get(attr, None))
                         setattr(new_obj, attr, transformation(val))
                     except BootstrapError as bex:
                         logger.fatal("Could not bootstrap %s on page %s with %s", relation_name, page.url_path, objects)
