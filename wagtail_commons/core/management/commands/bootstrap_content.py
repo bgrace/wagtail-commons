@@ -20,9 +20,9 @@ from django.conf import settings
 
 from wagtail.wagtaildocs.models import Document
 from wagtail.wagtailcore.models import Site, Page
-from wagtail.wagtailimages.models import get_image_model
+#from wagtail.wagtailimages.models import get_image_model
 
-from .utils import transformation_for_name, BootstrapError
+from .utils import transformation_for_name, BootstrapError, image_for_name
 
 try:
     from wagtail.wagtailimages.models import get_upload_to
@@ -227,7 +227,7 @@ class SiteNode:
             relation_mappings = dict()
 
         deferred_relations = []
-        page_data_mappings = relation_mappings.get(str(page.__class__.__name__))
+        page_data_mappings = relation_mappings.get(str(page.__class__.__name__), {})
 
         for attr, doc in page_properties.items():
             field_name, index = SiteNode.attribute_regex.search(attr).groups()
@@ -240,14 +240,16 @@ class SiteNode:
                 if isinstance(field_object, models.ForeignKey):
                     attr_mapper = page_data_mappings[attr]
                     if "$image" == attr_mapper:
-                        ImageModel = get_image_model()
-                        image_instance = ImageModel()
-                        file_name = get_upload_to(image_instance, os.path.basename(doc))
-                        image_query = ImageModel.objects.filter(file=file_name)
-                        if image_query.exists():
-                            setattr(page, attr, image_query.get())
+
+                        try:
+                            image_instance = image_for_name(doc)
+                        except BootstrapError:
+                            image_instance = None
+
+                        if image_instance:
+                            setattr(page, attr, image_instance)
                         else:
-                            logger.fatal("Could not find image %s on page %s", doc, page_properties['path'])
+                            logger.fatal("Could not find image %s on page %s", doc, page.url_path)
                             setattr(page, attr, None)
                     else:
                         type_mapper = get_direct_field_mappings(field_object)

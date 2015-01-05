@@ -1,6 +1,6 @@
 __author__ = 'brett@codigious.com'
 
-import logging
+import logging, os
 from django.http import Http404
 
 from wagtail.wagtailcore.models import Site, Page
@@ -40,6 +40,7 @@ def identity(val):
 
 
 def image_for_name(val):
+    val = os.path.basename(val)
     ImageModel = get_image_model()
     instance = ImageModel()
 
