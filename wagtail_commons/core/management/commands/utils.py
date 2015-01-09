@@ -2,6 +2,10 @@ __author__ = 'brett@codigious.com'
 
 import logging, os
 from django.http import Http404
+from django.template import Template, Context
+from django.db import models
+
+import markdown
 
 from wagtail.wagtailcore.models import Site, Page
 import wagtail.wagtailimages.models
@@ -18,6 +22,11 @@ logger = logging.getLogger('wagtail_commons.core')
 
 class BootstrapError(Exception):
     pass
+
+def render_markdown(md):
+    rendered_markdown = Template(md).render(Context())
+    db_safe_html = markdown.markdown(rendered_markdown, extensions=['extra', ])
+    return db_safe_html
 
 
 def page_for_path(path, site=None):
@@ -67,7 +76,16 @@ def document_for_name(val):
 
 
 def to_markdown(val):
-    return markdown.markdown(val)
+    return render_markdown(val)
+
+
+def transformation_for_field(field_object):
+
+    cls = field_object.__class__
+    if cls == wagtail.wagtailcore.fields.RichTextField:
+        return to_markdown
+
+    return identity
 
 
 def transformation_for_name(name):
@@ -93,6 +111,25 @@ def transformation_for_foreign_key(field_object):
 
     if related_model == wagtail.wagtailimages.models.Image:
         return image_for_name
+    if related_model == wagtail.wagtailcore.fields.RichTextField:
+        return to_markdown
     else:
         return model_by_natural_key(related_model)
+
+def transformation_for_model_field(model, attr_name, model_mapper):
+
+    # If a transformation is specified, use that
+    mapped_transformation = model_mapper.get(attr_name, None)
+    if mapped_transformation:
+        return transformation_for_name(mapped_transformation)
+
+    (field_object, model, direct, m2m) = model._meta.get_field_by_name(attr_name)
+
+    if isinstance(field_object, models.ForeignKey):
+        return transformation_for_foreign_key(field_object)
+    else:
+        return transformation_for_field(field_object)
+
+    return identity
+
 

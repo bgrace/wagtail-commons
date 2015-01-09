@@ -22,7 +22,7 @@ from wagtail.wagtaildocs.models import Document
 from wagtail.wagtailcore.models import Site, Page
 #from wagtail.wagtailimages.models import get_image_model
 
-from .utils import transformation_for_name, BootstrapError, image_for_name
+from .utils import transformation_for_name, transformation_for_model_field, BootstrapError, image_for_name, render_markdown
 
 try:
     from wagtail.wagtailimages.models import get_upload_to
@@ -117,9 +117,7 @@ def load_attributes_from_file(path):
     f.close()
 
     for key in documents:
-        rendered_markdown = Template(documents[key].getvalue()).render(Context())
-        db_safe_html = markdown.markdown(rendered_markdown, extensions=['extra', ])
-        content_attributes[key] = db_safe_html
+        content_attributes[key] = render_markdown(documents[key].getvalue())
 
     return content_attributes
 
@@ -211,9 +209,6 @@ class SiteNode:
     @staticmethod
     def set_page_attributes(page, page_properties, relation_mappings=None):
 
-        def get_direct_field_mappings(field_object):
-            return None
-
         def interpolate(page, index, doc, val):
             if "$page" == val:
                 return page
@@ -238,22 +233,30 @@ class SiteNode:
 
             if direct:
                 if isinstance(field_object, models.ForeignKey):
-                    attr_mapper = page_data_mappings[attr]
-                    if "$image" == attr_mapper:
+                    #attr_mapper = page_data_mappings[attr]
 
-                        try:
-                            image_instance = image_for_name(doc)
-                        except BootstrapError:
-                            image_instance = None
+                    t = transformation_for_model_field(page, attr, page_data_mappings)
+                    try:
+                        v = t(doc)
+                        print("{} for {} gets transformed to {}".format(doc, page, v))
 
-                        if image_instance:
-                            setattr(page, attr, image_instance)
-                        else:
-                            logger.fatal("Could not find image %s on page %s", doc, page.url_path)
-                            setattr(page, attr, None)
-                    else:
-                        type_mapper = get_direct_field_mappings(field_object)
-                        logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page_properties['path'])
+                    except BootstrapError:
+                        print("{} for {} has no transformation".format(doc, page.url_path))
+                        v = None
+
+                    setattr(page, attr, v)
+
+                    # if "$image" == attr_mapper:
+                    #
+                    #     try:
+                    #         image_instance = image_for_name(doc)
+                    #     except BootstrapError:
+                    #         image_instance = None
+                    #         logger.fatal("Could not find image %s on page %s", doc, page.url_path)
+                    #
+                    #     setattr(page, attr, image_instance)
+                    # else:
+                    #     logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page_properties['path'])
 
                 else:  # we don't yet support a way of setting a one-to-one here
                     setattr(page, attr, doc)
@@ -282,7 +285,10 @@ class SiteNode:
                         for k in common_keys:
                             create_attrs[k] = interpolate(page, index, doc, mappings[k])
 
+
                         for rel_attr, rel_doc in related_object.items():
+                            t = transformation_for_model_field(model, rel_attr, mappings)
+
                             if rel_attr in create_attrs:
                                 mapping_doc = create_attrs[rel_attr]
                             else:
@@ -291,6 +297,8 @@ class SiteNode:
                             if isinstance(mapping_doc, str):
                                 if '$' == mapping_doc[0]:
                                     defer_assignment = True
+                                else:
+                                    rel_doc = t(rel_doc)
                             else:
                                 defer_assignment = True
 
@@ -384,7 +392,12 @@ class SiteNode:
 
                 for attr, val in object.items():
                     try:
-                        transformation = transformation_for_name(model_mapper.get(attr, None))
+                        #transformation = transformation_for_name(model_mapper.get(attr, None))
+                        transformation = transformation_for_model_field(model, attr, model_mapper)
+
+                        if transformation is None:
+                            pass
+
                         setattr(new_obj, attr, transformation(val))
                     except BootstrapError as bex:
                         logger.fatal("Could not bootstrap %s on page %s with %s", relation_name, page.url_path, objects)
