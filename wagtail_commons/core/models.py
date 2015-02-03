@@ -75,7 +75,7 @@ class TemplateIntrospectable(object):
         return text_fragment_nodes
 
 
-class PathOverrideable(object):
+class PathOverrideable:
 
     def get_template(self, request, mode='', **kwargs):
         try:

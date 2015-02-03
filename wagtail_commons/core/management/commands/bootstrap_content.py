@@ -246,17 +246,6 @@ class SiteNode:
 
                     setattr(page, attr, v)
 
-                    # if "$image" == attr_mapper:
-                    #
-                    #     try:
-                    #         image_instance = image_for_name(doc)
-                    #     except BootstrapError:
-                    #         image_instance = None
-                    #         logger.fatal("Could not find image %s on page %s", doc, page.url_path)
-                    #
-                    #     setattr(page, attr, image_instance)
-                    # else:
-                    #     logger.warn("Don't know what to do with %s->%s on %s", attr, doc, page_properties['path'])
 
                 else:  # we don't yet support a way of setting a one-to-one here
                     setattr(page, attr, doc)
@@ -285,24 +274,26 @@ class SiteNode:
                         for k in common_keys:
                             create_attrs[k] = interpolate(page, index, doc, mappings[k])
 
+                        for related_object_attribute, related_object_value in related_object.items():
+                            # We use a $ on the field name or in the mapping directive to indicate deferred instatiation,
+                            # as a simple way of managing dependencies (can't link to page that doesn't yet exist)
+                            if '$' == related_object_attribute[0]:
+                                defer_assignment = True
+                                related_object_attribute = related_object_attribute[1:]
 
-                        for rel_attr, rel_doc in related_object.items():
-                            t = transformation_for_model_field(model, rel_attr, mappings)
 
-                            if rel_attr in create_attrs:
-                                mapping_doc = create_attrs[rel_attr]
-                            else:
-                                mapping_doc = rel_doc
+                            mapping_directive = create_attrs.get(related_object_attribute, None)
 
-                            if isinstance(mapping_doc, str):
-                                if '$' == mapping_doc[0]:
-                                    defer_assignment = True
-                                else:
-                                    rel_doc = t(rel_doc)
+                            if isinstance(mapping_directive, str):
+                                defer_assignment = '$' == mapping_directive[0]  # this object can't be instantiated yet
                             else:
                                 defer_assignment = True
 
-                            create_attrs[rel_attr] = rel_doc
+                            if not defer_assignment:
+                                t = transformation_for_model_field(model, related_object_attribute, mappings)
+                                related_object_value = t(related_object_value)
+
+                            create_attrs[related_object_attribute] = related_object_value
 
                         # for rel_doc in create_attrs.values():
                         #     print "Checking {}".format(rel_doc)
@@ -384,7 +375,7 @@ class SiteNode:
             field = getattr(page, relation_name)
             (field_object, _, _, _) = page._meta.get_field_by_name(relation_name)
             model = field_object.model
-            model_mapper = relation_mappings[model.__name__]
+            model_mapper = relation_mappings.get(model.__name__, {})
 
             related_objects = []
             for object in objects:
@@ -392,15 +383,15 @@ class SiteNode:
 
                 for attr, val in object.items():
                     try:
-                        #transformation = transformation_for_name(model_mapper.get(attr, None))
                         transformation = transformation_for_model_field(model, attr, model_mapper)
-
-                        if transformation is None:
-                            pass
-
                         setattr(new_obj, attr, transformation(val))
+
                     except BootstrapError as bex:
                         logger.fatal("Could not bootstrap %s on page %s with %s", relation_name, page.url_path, objects)
+                    except Exception as ex:
+                        logger.fatal("Logic or configuration error, %s attribute %s is %s;\nthe error occurred trying to set %s as %s", page, relation_name, object, attr, val)
+                        print(traceback.format_exc())
+                        exit(1)
 
                 related_objects.append(new_obj)
 

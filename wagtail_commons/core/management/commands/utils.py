@@ -7,8 +7,10 @@ from django.db import models
 
 import markdown
 
+import wagtail.wagtailcore.models
 from wagtail.wagtailcore.models import Site, Page
 import wagtail.wagtailimages.models
+
 from wagtail.wagtailimages.models import get_image_model
 
 try:
@@ -51,6 +53,13 @@ def identity(val):
 def image_for_name(val):
     val = os.path.basename(val)
     ImageModel = get_image_model()
+    try:
+        return ImageModel.objects.get(title=val)
+    except ImageModel.DoesNotExist:
+        logger.fatal("Could not find image %s", val)
+        raise BootstrapError
+
+
     instance = ImageModel()
 
     file_name = get_upload_to(instance, val)
@@ -113,6 +122,8 @@ def transformation_for_foreign_key(field_object):
         return image_for_name
     if related_model == wagtail.wagtailcore.fields.RichTextField:
         return to_markdown
+    if related_model == wagtail.wagtailcore.models.Page:
+        return page_for_path
     else:
         return model_by_natural_key(related_model)
 
