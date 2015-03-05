@@ -1,3 +1,5 @@
+from wagtail.wagtaildocs.models import Document
+
 __author__ = 'brett@codigious.com'
 
 import logging, os
@@ -75,7 +77,7 @@ def image_for_name(val):
 def model_by_natural_key(model_class):
 
     def f(val):
-        return model_class.get_by_natural_key(val)
+        return model_class.objects.get_by_natural_key(val)
 
     return f
 
@@ -114,6 +116,7 @@ def transformation_for_name(name):
     else:
         logger.critical("No transformation %s", name)
 
+
 def transformation_for_foreign_key(field_object):
 
     related_model = field_object.rel.to
@@ -126,6 +129,7 @@ def transformation_for_foreign_key(field_object):
         return page_for_path
     else:
         return model_by_natural_key(related_model)
+
 
 def transformation_for_model_field(model, attr_name, model_mapper):
 

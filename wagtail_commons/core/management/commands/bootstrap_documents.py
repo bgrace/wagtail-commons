@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from django.conf import settings
 from django.core.files import File
 from wagtail.wagtailimages.models import get_image_model
@@ -23,7 +24,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 logger = logging.getLogger(__name__)
 
-class ImageImporter(object):
+class DocumentImporter(object):
 
     ImageModel = get_image_model()
     image_instance = ImageModel()
@@ -35,14 +36,14 @@ class ImageImporter(object):
         self.owner = owner
         self.stdout = stdout
         self.stderr = stderr
-        self.results = {'total': 0,
-                        'unchanged': 0,
-                        'altered': 0,
-                        'inserted': 0,
-                        'ignored': 0}
+        self.results = Counter({'total': 0,
+                                'unchanged': 0,
+                                'altered': 0,
+                                'inserted': 0,
+                                'ignored': 0})
 
     def increment_stat(self, stat):
-        self.results[stat] += 1
+        self.results.update({stat: 1})
 
     def import_images(self):
         self.add_images_to_library(self.library_path)
@@ -115,7 +116,7 @@ class ImageImporter(object):
 
 class Command(BaseCommand):
     args = '<content directory>'
-    help = 'Imports files found in <content directory>/image-library into the Wagtail Image Library'
+    help = 'Imports files found in <content directory>/document-library into the Wagtail Document Library'
 
     option_list = BaseCommand.option_list + (
         make_option('--content', dest='content_path', type='string', ),
@@ -147,8 +148,8 @@ class Command(BaseCommand):
         if not os.path.isdir(content_path):
             raise CommandError("Could not find image library '{0}'".format(content_path))
 
-        importer = ImageImporter(path=content_path, owner=owner, stdout=self.stdout, stderr=self.stderr)
-        importer.import_images()
+        importer = DocumentImporter(path=content_path, owner=owner, stdout=self.stdout, stderr=self.stderr)
+        importer.import_documents()
         results = importer.get_results()
         print("Total: {0}, unchanged: {1}, replaced: {2}, new: {3}, ignored: {4}".format(results['total'],
                                                                                          results['unchanged'],
