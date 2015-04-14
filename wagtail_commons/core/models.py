@@ -112,7 +112,11 @@ class PathOverrideable:
 
             logger.debug("Adding candidate template based on model name only: %s", self.template)
             selected_template = select_template(templates)
-            logger.debug("Selected template: %s", selected_template.name)
+            try:
+                logger.debug("Selected template: %s", selected_template.name)
+            except AttributeError:  # Django 1.8 template refactoring...
+                logger.debug("Selected template: %s", selected_template.template.name)
+
 
             self._path_overrideable_template = selected_template
             return self._path_overrideable_template

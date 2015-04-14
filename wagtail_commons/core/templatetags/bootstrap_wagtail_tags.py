@@ -1,7 +1,7 @@
 from django import template
 import datetime
 from wagtail.wagtailcore.models import Page
-from wagtail.wagtailcore.rich_text import EMBED_HANDLERS, LINK_HANDLERS
+from wagtail.wagtailcore.rich_text import EMBED_HANDLERS, LINK_HANDLERS, get_embed_handler
 from wagtail.wagtailimages.models import get_image_model
 
 try:
@@ -13,6 +13,8 @@ except ImportError:
 __author__ = 'bgrace'
 
 register = template.Library()
+
+
 
 
 class CurrentTimeNode(template.Node):
@@ -47,7 +49,7 @@ def image(image_filename, format, alt_text):
         return "<span style='background: red; color: white'>MISSING IMAGE %s</span>" % image_filename
     else:
         image = query.get()
-        embed_handler = EMBED_HANDLERS['image']
+        embed_handler = get_embed_handler('image')
         image_attrs = embed_handler.get_db_attributes({'data-id': image.id,
                                                        'data-format': format,
                                                        'data-alt': alt_text})
