@@ -1,7 +1,7 @@
 from django import template
 import datetime
 from wagtail.wagtailcore.models import Page
-from wagtail.wagtailcore.rich_text import EMBED_HANDLERS, LINK_HANDLERS, get_embed_handler
+from wagtail.wagtailcore.rich_text import LINK_HANDLERS
 from wagtail.wagtailimages.models import get_image_model
 
 try:
@@ -9,6 +9,14 @@ try:
 except ImportError:
     def get_upload_to(instance, path):
         return instance.get_upload_to(path)
+
+try:
+    from wagtail.wagtailcore.rich_text import get_embed_handler
+except ImportError:
+    from wagtail.wagtailcore.rich_text import EMBED_HANDLERS
+    def get_embed_handler(name):
+        return EMBED_HANDLERS[name]
+
 
 __author__ = 'bgrace'
 
